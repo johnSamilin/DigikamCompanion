@@ -1,0 +1,89 @@
+{
+  "migIndex": 1,
+  "data": [
+    {
+      "path": "assets/fonts/SenseFont1.0-Regular.ttf",
+      "sha1": "da849b4504f09702fb1b428223dfbf2eb8f0dbf7"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Black Italic.ttf",
+      "sha1": "a9a3c552123f3e6bcf135b76e0bbeeae28ad73c8"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Black.ttf",
+      "sha1": "ec3379776b6afff9cc59f805301e1ca5d63c1abd"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Bold Italic.ttf",
+      "sha1": "78fe544c237b156fc272dc434e90d61ad132b7e1"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Bold.ttf",
+      "sha1": "48e87f97d359cb9f6d3f9b28b600e00c66d599e3"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial DemiBold Italic.ttf",
+      "sha1": "2781a4776f5465e501e73967cecd71ac9032af76"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial DemiBold.ttf",
+      "sha1": "cdc35703fcc21f6db14d57639544a59b38432d54"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial ExtraBold Italic.ttf",
+      "sha1": "bc541c32cde1337ddf1466c949badaccd497222a"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial ExtraBold.ttf",
+      "sha1": "d40c5eea63ba73ccde5c7fd5ba521bb76e94715c"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial ExtraLight Italic.ttf",
+      "sha1": "c54a608757b9ca777c687cfe3c8acc75e46d2da4"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial ExtraLight.ttf",
+      "sha1": "b496c88ed1143cf8bf78bcab545c6b689c29b746"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Italic Variable.ttf",
+      "sha1": "5f929303268fb600b0f17221aa7971c39f1ea32c"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Italic.ttf",
+      "sha1": "e37a1950d7af2d42ae5312e622a44c08129b9f06"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Light Italic.ttf",
+      "sha1": "1a2d21c8732dcee46cc98a031fc55dd8e41a5bf9"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Light.ttf",
+      "sha1": "a43a949bfed0a6763d76de61eb0fd705d0943010"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Medium Italic.ttf",
+      "sha1": "1bb8fa0b65e8008e360eb9a9143a616af418154b"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Medium.ttf",
+      "sha1": "e7c430d730d1302b12e2e12877e8646279562ecc"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Regular.ttf",
+      "sha1": "ac868417e68799bf34795719ff7a2fcc398f6089"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Thin Italic.ttf",
+      "sha1": "8af40be44587f742632f719850d00b0e80765455"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Thin.ttf",
+      "sha1": "af5783801f8a2240fab31cfaa3ccb4af45159505"
+    },
+    {
+      "path": "assets/fonts/TT Tricks Trial Variable.ttf",
+      "sha1": "fc1d3b7f2922b09dd94f7e29bd9643fced148871"
+    }
+  ]
+}

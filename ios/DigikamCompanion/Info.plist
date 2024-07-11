@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>DigikamCompanion</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen.storyboard</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>SenseFont1.0-Regular.ttf</string>
+		<string>TT Tricks Trial Black Italic.ttf</string>
+		<string>TT Tricks Trial Black.ttf</string>
+		<string>TT Tricks Trial Bold Italic.ttf</string>
+		<string>TT Tricks Trial Bold.ttf</string>
+		<string>TT Tricks Trial DemiBold Italic.ttf</string>
+		<string>TT Tricks Trial DemiBold.ttf</string>
+		<string>TT Tricks Trial ExtraBold Italic.ttf</string>
+		<string>TT Tricks Trial ExtraBold.ttf</string>
+		<string>TT Tricks Trial ExtraLight Italic.ttf</string>
+		<string>TT Tricks Trial ExtraLight.ttf</string>
+		<string>TT Tricks Trial Italic Variable.ttf</string>
+		<string>TT Tricks Trial Italic.ttf</string>
+		<string>TT Tricks Trial Light Italic.ttf</string>
+		<string>TT Tricks Trial Light.ttf</string>
+		<string>TT Tricks Trial Medium Italic.ttf</string>
+		<string>TT Tricks Trial Medium.ttf</string>
+		<string>TT Tricks Trial Regular.ttf</string>
+		<string>TT Tricks Trial Thin Italic.ttf</string>
+		<string>TT Tricks Trial Thin.ttf</string>
+		<string>TT Tricks Trial Variable.ttf</string>
+	</array>
+</dict>
+</plist>
