@@ -75,6 +75,7 @@ function Filter({ navigation }) {
 				{store.tags.map(tag => (
 					<Album
 						key={tag.id}
+						id={tag.id}
 						relativePath={tag.name}
 						isSelected={store.activeFilters.tagIds.has(tag.id)}
 						onChangeState={toggleTag}

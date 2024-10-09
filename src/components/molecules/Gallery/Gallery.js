@@ -72,17 +72,19 @@ const styles = {
 	},
 };
 
-function Picture({ uri, name }) {
+function Picture({ uri, name, onPress }) {
 	const isExist = useRef(true);
 
 	return isExist.current ? (
-		<Image
-			style={styles.picture}
-			source={{ isStatic: true, uri }}
-			onError={() => {
-				isExist.current = false;
-			}}
-		/>
+		<TouchableOpacity onPress={onPress}>
+			<Image
+				style={styles.picture}
+				source={{ isStatic: true, uri }}
+				onError={() => {
+					isExist.current = false;
+				}}
+			/>
+		</TouchableOpacity>
 	) : (
 		<View style={styles.picture}>
 			<Text>Этого файла нет на диске</Text>
@@ -91,11 +93,16 @@ function Picture({ uri, name }) {
 	);
 }
 
-function Row({ item }) {
+function Row({ item, onPress }) {
 	return (
 		<View style={styles.row}>
 			{item.map((pic, i) => (
-				<Picture key={pic?.id ?? Math.random()} uri={pic.uri} name={pic.name} />
+				<Picture
+					key={pic?.id ?? Math.random()}
+					uri={pic.uri}
+					name={pic.name}
+					onPress={() => onPress(pic.id)}
+				/>
 			))}
 		</View>
 	);
@@ -112,6 +119,17 @@ export const Gallery = observer(({ navigation }) => {
 		);
 	};
 
+	const showImage = imageId => {
+		navigation.dispatch(
+			CommonActions.navigate({
+				name: 'ImageSlider',
+				params: {
+					id: imageId,
+				},
+			}),
+		);
+	};
+
 	return (
 		<View style={styles.wrapper}>
 			{/* <RNGallery data={store.images.map(i => i.uri)} /> */}
@@ -121,7 +139,11 @@ export const Gallery = observer(({ navigation }) => {
 					<VirtualizedList
 						initialNumToRender={4}
 						renderItem={props => (
-							<Row {...props} maxIndex={store.images.length} />
+							<Row
+								{...props}
+								maxIndex={store.images.length}
+								onPress={showImage}
+							/>
 						)}
 						keyExtractor={item => item[0]?.uri}
 						getItemCount={() => Math.ceil(store.images.length)}
@@ -135,6 +157,7 @@ export const Gallery = observer(({ navigation }) => {
 				) : (
 					<View style={styles.emptyState}>
 						<Text>А фото-то и нет...</Text>
+						<Text>Ну или запрос в БД еще не завершен</Text>
 					</View>
 				)}
 			</>

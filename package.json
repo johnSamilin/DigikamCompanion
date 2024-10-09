@@ -27,7 +27,7 @@
     "react": "18.2.0",
     "react-i18next": "^14.1.0",
     "react-native": "0.74.1",
-    "react-native-awesome-gallery": "^0.3.9",
+    "react-native-awesome-gallery": "^0.4.3",
     "react-native-document-picker": "^9.3.0",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.16.0",

@@ -174,8 +174,9 @@ export class RootStore {
 			);
 		}
 
-		const sql = `select id, album, name from Images where ${constraints.length > 0 ? constraints.join(' and ') : '1'
-			} order by modificationDate desc`;
+		const sql = `select id, album, name from Images where ${
+			constraints.length > 0 ? constraints.join(' and ') : '1'
+		} order by modificationDate desc`;
 		this.addLog(sql);
 
 		this.db.transaction(tx => {
@@ -190,8 +191,9 @@ export class RootStore {
 					try {
 						for (let index = 0; index < res.rows.length; index++) {
 							const image = res.rows.item(index);
-							image.uri = `file://${ExternalStorageDirectoryPath}/${fixedRoot}${this.albums.get(image.album).relativePath
-								}/${image.name}`;
+							image.uri = `file://${ExternalStorageDirectoryPath}/${fixedRoot}${
+								this.albums.get(image.album).relativePath
+							}/${image.name}`;
 							images.push(image);
 						}
 					} catch (er) {
