@@ -14,6 +14,7 @@
       android:theme="@style/AppTheme"
       android:requestLegacyExternalStorage="true"
       android:preserveLegacyExternalStorage="true"
+      requestLegacyExternalStorage="true"
   >
     <activity
         android:name=".MainActivity"

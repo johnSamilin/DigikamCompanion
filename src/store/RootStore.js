@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { ToastAndroid } from 'react-native';
+import { Dimensions, ToastAndroid } from 'react-native';
 import {
 	CachesDirectoryPath,
 	copyFile,
@@ -15,7 +15,7 @@ const mmkv = new MMKV();
 const dbName = 'digikam4';
 const originalDbName = 'digikam4-original.db';
 // TODO найти куда копировать базу
-const localDbPath = `${ExternalStorageDirectoryPath}/${originalDbName}`;
+const localDbPath = `${DocumentDirectoryPath}/${originalDbName}`;
 
 export class RootStore {
 	rootFolder = null;
@@ -37,8 +37,20 @@ export class RootStore {
 
 	log = [];
 
-	/** @type {{ albumIds: number[]; tagIds: number[] }} */
-	activeFilters = {};
+	/** @type {{ albumIds: Set<number>; tagIds: Set<number> }} */
+	activeFilters = {
+		albumIds: new Set(),
+		tagIds: new Set(),
+	};
+
+	/** @type {ENUM<'P', 'L'>} */
+	orientaion = 'P';
+
+	get isFilterApplied() {
+		return (
+			this.activeFilters.albumIds.size > 0 || this.activeFilters.tagIds.size > 0
+		);
+	}
 
 	constructor() {
 		makeAutoObservable(this);
@@ -46,6 +58,11 @@ export class RootStore {
 		if (this.rootFolder) {
 			this.getDBConnection();
 		}
+		Dimensions.addEventListener('change', ({ window: { width, height } }) => {
+			runInAction(() => {
+				this.orientaion = width < height ? 'P' : 'L';
+			});
+		});
 	}
 
 	getDBConnection = () => {
@@ -73,7 +90,7 @@ export class RootStore {
 						this.readTags();
 					},
 					err => {
-						this.addLog(`OPEN DATABASE ERROR: ${err.message}`);
+						this.addLog(`OPEN DATABASE ERROR: ${JSON.stringify(err)}`);
 					},
 				);
 			})
@@ -142,24 +159,23 @@ export class RootStore {
 		});
 	};
 
-	selectPhotos = () => {
+	selectPhotos = (activeFilters = { albumIds: [], tagIds: [] }) => {
 		// TODO: фотки вне альбомов?
 		const constraints = ['album is not null'];
 
-		if ('albumIds' in this.activeFilters) {
-			constraints.push(`album in (${this.activeFilters.albumIds.join(', ')})`);
+		if (activeFilters.albumIds.length) {
+			constraints.push(`album in (${activeFilters.albumIds.join(', ')})`);
 		}
-		if ('tagIds' in this.activeFilters) {
+		if (activeFilters.tagIds.length) {
 			constraints.push(
-				`id in (select imageid from ImageTags where tagid in ${this.activeFilters.tagIds.join(
+				`id in (select imageid from ImageTags where tagid in (${activeFilters.tagIds.join(
 					', ',
-				)})`,
+				)}))`,
 			);
 		}
 
-		const sql = `select id, album, name from Images where ${
-			constraints.length > 0 ? constraints.join(' and ') : '1'
-		} order by modificationDate desc`;
+		const sql = `select id, album, name from Images where ${constraints.length > 0 ? constraints.join(' and ') : '1'
+			} order by modificationDate desc`;
 		this.addLog(sql);
 
 		this.db.transaction(tx => {
@@ -174,9 +190,8 @@ export class RootStore {
 					try {
 						for (let index = 0; index < res.rows.length; index++) {
 							const image = res.rows.item(index);
-							image.uri = `file://${ExternalStorageDirectoryPath}/${fixedRoot}${
-								this.albums.get(image.album).relativePath
-							}/${image.name}`;
+							image.uri = `file://${ExternalStorageDirectoryPath}/${fixedRoot}${this.albums.get(image.album).relativePath
+								}/${image.name}`;
 							images.push(image);
 						}
 					} catch (er) {
@@ -184,7 +199,6 @@ export class RootStore {
 					}
 					this.addLog(`${res.rows.length} IMAGES`);
 					runInAction(() => {
-						this.addLog(images[0].uri);
 						this.images = images;
 						tx.commit();
 					});
@@ -213,6 +227,37 @@ export class RootStore {
 	getLog() {
 		return this.log.join('\r\n');
 	}
+
+	addAlbumToFilters(id) {
+		runInAction(() => {
+			this.activeFilters.albumIds.add(id);
+		});
+	}
+
+	removeAlbumFromFilters(id) {
+		runInAction(() => {
+			this.activeFilters.albumIds.delete(id);
+		});
+	}
+
+	addTagToFilters(id) {
+		runInAction(() => {
+			this.activeFilters.tagIds.add(id);
+		});
+	}
+
+	removeTagFromFilters(id) {
+		runInAction(() => {
+			this.activeFilters.tagIds.delete(id);
+		});
+	}
+
+	resetFilters = () => {
+		runInAction(() => {
+			this.activeFilters.albumIds.clear();
+			this.activeFilters.tagIds.clear();
+		});
+	};
 }
 
 export const rootStore = new RootStore();

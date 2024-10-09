@@ -1,4 +1,5 @@
 import {
+	Button,
 	Dimensions,
 	Image,
 	SafeAreaView,
@@ -12,16 +13,49 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import { useEffect, useRef, useState } from 'react';
 import { TouchableOpacity } from 'react-native-gesture-handler';
-import { Filters } from '../Filters/Filters';
 import { CommonActions } from '@react-navigation/native';
+import { Filters } from '../Filters/Filters';
 
 const screenWidth = Dimensions.get('window').width;
-const itemsPerRow = 3;
-const w = screenWidth / itemsPerRow;
+const itemsPerRowPortrat = 4;
+const itemsPerRowLandscape = 6;
+let itemsPerRow = itemsPerRowPortrat;
+let w = screenWidth / itemsPerRow;
 
-function Picture({ uri, name }) {
-	const isExist = useRef(true);
-	const pictureStyle = {
+Dimensions.addEventListener('change', ({ window: { width, height } }) => {
+	if (width < height) {
+		itemsPerRow = itemsPerRowPortrat;
+	} else {
+		itemsPerRow = itemsPerRowLandscape;
+	}
+
+	// TODO: поворот
+	w = screenWidth / itemsPerRow;
+});
+
+const styles = {
+	wrapper: {
+		display: 'flex',
+		flexDirection: 'column',
+		height: '100%',
+	},
+	row: {
+		display: 'flex',
+		flexDirection: 'row',
+	},
+	filterBtn: {
+		position: 'absolute',
+		right: 20,
+		bottom: 60,
+	},
+	title: {
+		fontSize: 15,
+		fontWeight: 'bold',
+		paddingTop: 10,
+		paddingBottom: 10,
+		textAlign: 'center',
+	},
+	picture: {
 		width: w,
 		height: w,
 		borderWidth: 1,
@@ -29,18 +63,28 @@ function Picture({ uri, name }) {
 		display: 'flex',
 		alignItems: 'center',
 		justifyContent: 'center',
-	};
+	},
+	emptyState: {
+		flexGrow: 1,
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+};
+
+function Picture({ uri, name }) {
+	const isExist = useRef(true);
 
 	return isExist.current ? (
 		<Image
-			style={pictureStyle}
+			style={styles.picture}
 			source={{ isStatic: true, uri }}
 			onError={() => {
 				isExist.current = false;
 			}}
 		/>
 	) : (
-		<View style={pictureStyle}>
+		<View style={styles.picture}>
 			<Text>Этого файла нет на диске</Text>
 			<Text>{name}</Text>
 		</View>
@@ -49,7 +93,7 @@ function Picture({ uri, name }) {
 
 function Row({ item }) {
 	return (
-		<View style={{ display: 'flex', flexDirection: 'row' }}>
+		<View style={styles.row}>
 			{item.map((pic, i) => (
 				<Picture key={pic?.id ?? Math.random()} uri={pic.uri} name={pic.name} />
 			))}
@@ -69,10 +113,11 @@ export const Gallery = observer(({ navigation }) => {
 	};
 
 	return (
-		<View>
+		<View style={styles.wrapper}>
 			{/* <RNGallery data={store.images.map(i => i.uri)} /> */}
-			{store.images.length > 0 ? (
-				<>
+			<>
+				<Text style={styles.title}>{store.images.length} фото</Text>
+				{store.images.length > 0 ? (
 					<VirtualizedList
 						initialNumToRender={4}
 						renderItem={props => (
@@ -87,36 +132,15 @@ export const Gallery = observer(({ navigation }) => {
 							)
 						}
 					/>
-					<TouchableOpacity onPress={openFilters}>
-						<View
-							style={{
-								backgroundColor:
-									store.activeFilters.albumIds?.length ||
-										store.activeFilters.tagIds?.length
-										? 'green'
-										: 'coral',
-								position: 'absolute',
-								bottom: 0,
-								left: 0,
-								right: 0,
-								padding: 20,
-							}}
-						>
-							<Text
-								style={{
-									fontFamily: 'TT Tricks Trial Bold',
-									fontSize: 30,
-									color: 'black',
-									textAlign: 'center',
-									width: '100%',
-								}}
-							>
-								Фильтры
-							</Text>
-						</View>
-					</TouchableOpacity>
-				</>
-			) : null}
+				) : (
+					<View style={styles.emptyState}>
+						<Text>А фото-то и нет...</Text>
+					</View>
+				)}
+			</>
+			<View style={styles.filterBtn}>
+				<Button onPress={openFilters} title="Фильтр" />
+			</View>
 			{store.isPermissionDenied && (
 				<Text>
 					Пожалуйста, разрешите приложению доступ ко всем файлам (в настройках

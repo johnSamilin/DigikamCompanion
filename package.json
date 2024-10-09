@@ -11,7 +11,8 @@
     "type-check": "tsc",
     "test:report": "jest --collectCoverage --coverageDirectory=\"./coverage\" --ci --reporters=default --reporters=jest-junit --coverage",
     "pod-install": "cd ios && pod install && cd ..",
-    "postinstall": "npx patch-package"
+    "postinstall": "npx patch-package",
+    "build:release": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res && cd android && gradlew assembleRelease"
   },
   "dependencies": {
     "@react-native-masked-view/masked-view": "^0.3.1",
@@ -20,6 +21,7 @@
     "@tanstack/react-query": "^5.31.0",
     "i18next": "^23.11.2",
     "ky": "^1.2.4",
+    "manage-external-storage": "^0.1.3",
     "mobx": "^6.13.0",
     "mobx-react-lite": "^4.0.7",
     "react": "18.2.0",

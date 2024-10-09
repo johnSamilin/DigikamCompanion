@@ -1,22 +1,40 @@
 import { Text, View } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 
-export function Album({ id, albumRoot, relativePath }) {
+const styles = {
+	album: {
+		fontFamily: 'TT Tricks Trial Bold',
+		fontSize: 20,
+		color: 'black',
+	},
+	selected: {
+		fontFamily: 'SenseFont1.0-Regular',
+		fontSize: 15,
+		color: 'green',
+	},
+};
+
+export function Album({
+	id,
+	albumRoot,
+	relativePath,
+	isSelected = false,
+	onChangeState,
+}) {
 	const path = relativePath.split('/');
 	const level = path.length - 1;
 	const name = path[level];
 	return (
-		<View
-			style={{
-				padding: 10,
-				paddingLeft: level * 15,
-			}}
-		>
-			<Text style={{ fontFamily: 'TT Tricks Trial Bold', fontSize: 30, color: 'black' }}>
-				{name}
-			</Text>
-			<Text style={{ fontFamily: 'SenseFont1.0-Regular', fontSize: 20, color: 'gray' }}>
-				10 photos
-			</Text>
-		</View>
+		<TouchableOpacity onPress={() => onChangeState(!isSelected, id)}>
+			<View
+				style={{
+					padding: 10,
+					paddingLeft: level * 15,
+				}}
+			>
+				<Text style={styles.album}>{name}</Text>
+				{isSelected && <Text style={styles.selected}>Выбран</Text>}
+			</View>
+		</TouchableOpacity>
 	);
 }
