@@ -176,7 +176,7 @@ export class RootStore {
 
 		const sql = `select id, album, name from Images where ${
 			constraints.length > 0 ? constraints.join(' and ') : '1'
-		} order by modificationDate desc`;
+		} order by name desc`;
 		this.addLog(sql);
 
 		this.db.transaction(tx => {

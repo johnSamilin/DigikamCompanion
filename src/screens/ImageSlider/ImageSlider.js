@@ -1,17 +1,6 @@
-import {
-	Text,
-	View,
-	DrawerLayoutAndroid,
-	TouchableOpacity,
-	Button,
-	ScrollView,
-} from 'react-native';
 import { SafeScreen } from '@/components/template';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
-import { CommonActions, useNavigation } from '@react-navigation/native';
-import { Album } from '@/components/molecules';
-import { useMemo } from 'react';
 import Gallery from 'react-native-awesome-gallery';
 
 const styles = {};
@@ -29,7 +18,7 @@ function ImageSlider({ route }) {
 
 	return (
 		<SafeScreen>
-			<Gallery data={uris} initialIndex={initialIndex} />
+			<Gallery data={uris} initialIndex={initialIndex} numToRender={3} />
 		</SafeScreen>
 	);
 }
