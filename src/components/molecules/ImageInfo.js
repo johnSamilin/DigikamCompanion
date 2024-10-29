@@ -1,6 +1,7 @@
-import { Button, Share, Text, ToastAndroid, View } from 'react-native';
+import { Button, Text, ToastAndroid, View } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
+import Share from 'react-native-share';
 
 const styles = {
 	wrapper: {
@@ -30,7 +31,7 @@ export const ImageInfo = observer(({ currentImage }) => {
 	const handleShare = async () => {
 		try {
 			await Share.open({
-				url: currentImage.current.uri,
+				url: currentImage.uri,
 			});
 		} catch (error) {
 			addLog(error.message);

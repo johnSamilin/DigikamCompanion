@@ -2,7 +2,7 @@ import { SafeScreen } from '@/components/template';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import Gallery from 'react-native-awesome-gallery';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { ImageInfo } from '@/components/molecules/ImageInfo';
 
@@ -26,6 +26,7 @@ const styles = {
 
 function ImageSlider({ route }) {
 	const { images } = useStore();
+	const [selectedImage, setSelectedImage] = useState();
 	const currentImage = useRef(null);
 	let initialIndex = 0;
 	const uris = images.map(({ uri, id }, index) => {
@@ -38,7 +39,7 @@ function ImageSlider({ route }) {
 	});
 
 	const onChangeImage = index => {
-		currentImage.current = images[index];
+		setSelectedImage(images[index]);
 	};
 
 	const [isPanelShown, setPanelState] = useState(false);
@@ -67,9 +68,7 @@ function ImageSlider({ route }) {
 				}
 				onTouchStart={showPanel}
 			>
-				{currentImage.current && (
-					<ImageInfo currentImage={currentImage.current} />
-				)}
+				{selectedImage && <ImageInfo currentImage={selectedImage} />}
 			</View>
 		</SafeScreen>
 	);
