@@ -46,6 +46,8 @@ export class RootStore {
 	/** @type {ENUM<'P', 'L'>} */
 	orientaion = 'P';
 
+	fileUriPrefix = `file://${ExternalStorageDirectoryPath}/`;
+
 	get isFilterApplied() {
 		return (
 			this.activeFilters.albumIds.size > 0 || this.activeFilters.tagIds.size > 0
@@ -191,7 +193,7 @@ export class RootStore {
 					try {
 						for (let index = 0; index < res.rows.length; index++) {
 							const image = res.rows.item(index);
-							image.uri = `file://${ExternalStorageDirectoryPath}/${fixedRoot}${
+							image.uri = `${this.fileUriPrefix}${fixedRoot}${
 								this.albums.get(image.album).relativePath
 							}/${image.name}`;
 							images.push(image);
