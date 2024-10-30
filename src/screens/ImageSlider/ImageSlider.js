@@ -27,12 +27,10 @@ const styles = {
 function ImageSlider({ route }) {
 	const { images } = useStore();
 	const [selectedImage, setSelectedImage] = useState();
-	const currentImage = useRef(null);
 	let initialIndex = 0;
 	const uris = images.map(({ uri, id }, index) => {
 		if (id === route.params.id) {
 			initialIndex = index;
-			currentImage.current = images[index];
 		}
 
 		return uri;
