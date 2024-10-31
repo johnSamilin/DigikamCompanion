@@ -27,8 +27,11 @@ export class RootStore {
 	/** @type {Map<{ id: number; albumRoot: string; relativePath: string }>} */
 	albums = new Map();
 
-	/** @type {{ id: number; name: string } []} */
-	tags = [];
+	/** @type {Map<number, { id: number; name: string }>} */
+	tags = new Map();
+
+	/** @type {Map<number, { tagid: number, tagname: string }[]>} */
+	imageTags = new Map();
 
 	/** @type {{ id: number; album: number; name: string; uri: string; } []} */
 	images = [];
@@ -88,8 +91,11 @@ export class RootStore {
 							this.isReady = true;
 						});
 						this.db = database;
-						this.readAlbums().then(() => this.selectPhotos());
-						this.readTags();
+						Promise.all([
+							this.readAlbums(),
+							this.readTags(),
+							this.readImageTags(),
+						]).then(() => this.selectPhotos());
 					},
 					err => {
 						this.addLog(`OPEN DATABASE ERROR: ${JSON.stringify(err)}`);
@@ -137,17 +143,15 @@ export class RootStore {
 	};
 
 	readTags = () => {
-		this.db.transaction(tx => {
+		return this.db.transaction(tx => {
 			tx.executeSql(
-				'SELECT id, name from Tags',
+				'SELECT id, name from Tags where id > 25', // first 25 tags are system ones
 				[],
 				(t, res) => {
-					const tags = [];
+					const tags = new Map();
 					for (let index = 0; index < res.rows.length; index++) {
-						const folder = res.rows.item(index);
-						runInAction(() => {
-							tags.push(folder);
-						});
+						const tag = res.rows.item(index);
+						tags.set(tag.id, tag);
 					}
 					this.addLog('READ TAGS');
 					this.tags = tags;
@@ -155,6 +159,31 @@ export class RootStore {
 				},
 				er => {
 					this.addLog(`SELECT TAGS ERR: ${er.message}`);
+					tx.rollback();
+				},
+			);
+		});
+	};
+
+	readImageTags = () => {
+		return this.db.transaction(tx => {
+			tx.executeSql(
+				'SELECT imageid, tagid from ImageTags',
+				[],
+				(t, res) => {
+					const imagetags = new Map();
+					for (let index = 0; index < res.rows.length; index++) {
+						const { imageid, tagid } = res.rows.item(index);
+						const tags = imagetags.has(imageid) ? imagetags.get(imageid) : [];
+						tags.push({ tagid, tagname: this.tags.get(tagid).name });
+						imagetags.set(imageid, tags);
+					}
+					this.addLog('READ IMAGE TAGS');
+					this.imagetags = imagetags;
+					tx.commit();
+				},
+				er => {
+					this.addLog(`SELECT Image TAGS ERR: ${er.message}`);
 					tx.rollback();
 				},
 			);

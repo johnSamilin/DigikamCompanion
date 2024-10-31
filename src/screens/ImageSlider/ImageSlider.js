@@ -2,7 +2,7 @@ import { SafeScreen } from '@/components/template';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import Gallery from 'react-native-awesome-gallery';
-import { useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { ImageInfo } from '@/components/molecules/ImageInfo';
 
@@ -15,9 +15,11 @@ const styles = {
 		display: 'flex',
 		flexDirection: 'column',
 		bottom: 0,
-		width: '100%',
+		width: '90%',
+		left: '5%',
+		borderRadius: 5,
 		position: 'absolute',
-		backgroundColor: 'white',
+		backgroundColor: 'beige',
 	},
 	infoWrapperHidden: {
 		height: 45,

@@ -26,7 +26,7 @@ const styles = {
 };
 
 export const ImageInfo = observer(({ currentImage }) => {
-	const { fileUriPrefix, addLog } = useStore();
+	const store = useStore();
 
 	const handleShare = async () => {
 		try {
@@ -34,7 +34,7 @@ export const ImageInfo = observer(({ currentImage }) => {
 				url: currentImage.uri,
 			});
 		} catch (error) {
-			addLog(error.message);
+			store.addLog(error.message);
 			ToastAndroid.show(
 				'Что-то не так. см. Системные сообщения',
 				ToastAndroid.LONG,
@@ -45,7 +45,13 @@ export const ImageInfo = observer(({ currentImage }) => {
 	return (
 		<View style={styles.wrapper}>
 			<Text style={styles.name}>
-				{currentImage?.uri.replace(fileUriPrefix, '')}
+				{currentImage?.uri.replace(store.fileUriPrefix, '')}
+			</Text>
+			<Text style={styles.name}>
+				{store.imagetags
+					.get(currentImage.id)
+					?.map(t => t.tagname)
+					.join(', ')}
 			</Text>
 			<View style={styles.button}>
 				<Button title="Share" onPress={handleShare} />

@@ -72,7 +72,7 @@ function Filter({ navigation }) {
 		<SafeScreen>
 			<ScrollView>
 				<Text style={styles.sectionTitle}>Tags</Text>
-				{store.tags.map(tag => (
+				{[...store.tags].map(([id, tag]) => (
 					<Album
 						key={tag.id}
 						id={tag.id}
