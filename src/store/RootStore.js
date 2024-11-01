@@ -175,7 +175,10 @@ export class RootStore {
 					for (let index = 0; index < res.rows.length; index++) {
 						const { imageid, tagid } = res.rows.item(index);
 						const tags = imagetags.has(imageid) ? imagetags.get(imageid) : [];
-						tags.push({ tagid, tagname: this.tags.get(tagid).name });
+						const tag = this.tags.get(tagid);
+						if (tag) {
+							tags.push({ tagid, tagname: tag.name });
+						}
 						imagetags.set(imageid, tags);
 					}
 					this.addLog('READ IMAGE TAGS');
@@ -205,9 +208,8 @@ export class RootStore {
 			);
 		}
 
-		const sql = `select id, album, name from Images where ${
-			constraints.length > 0 ? constraints.join(' and ') : '1'
-		} order by name desc`;
+		const sql = `select id, album, name from Images where ${constraints.length > 0 ? constraints.join(' and ') : '1'
+			} order by name desc`;
 		this.addLog(sql);
 
 		this.db.transaction(tx => {
@@ -222,9 +224,8 @@ export class RootStore {
 					try {
 						for (let index = 0; index < res.rows.length; index++) {
 							const image = res.rows.item(index);
-							image.uri = `${this.fileUriPrefix}${fixedRoot}${
-								this.albums.get(image.album).relativePath
-							}/${image.name}`;
+							image.uri = `${this.fileUriPrefix}${fixedRoot}${this.albums.get(image.album).relativePath
+								}/${image.name}`;
 							images.push(image);
 						}
 					} catch (er) {
