@@ -31,7 +31,7 @@ export class RootStore {
 	tags = new Map();
 
 	/** @type {Map<number, { tagid: number, tagname: string }[]>} */
-	imageTags = new Map();
+	imagetags = new Map();
 
 	/** @type {{ id: number; album: number; name: string; uri: string; } []} */
 	images = [];
@@ -71,13 +71,8 @@ export class RootStore {
 	}
 
 	getDBConnection = () => {
-		const root = decodeURIComponent(this.rootFolder);
-		const originalDbPath = `/storage/emulated/0/${root.substring(
-			root.lastIndexOf(':') + 1,
-		)}/${dbName}.db`;
-		copyFile(originalDbPath, localDbPath)
+		this.copyDBToCache()
 			.then(() => {
-				this.addLog(`DB File copied to ${localDbPath}`);
 				runInAction(() => {
 					this.isPermissionDenied = false;
 				});
@@ -105,6 +100,24 @@ export class RootStore {
 			.catch(er => {
 				this.addLog(`\r\n${er.message}`);
 			});
+	};
+
+	copyDBToCache = () => {
+		const root = decodeURIComponent(this.rootFolder);
+		const originalDbPath = `/storage/emulated/0/${root.substring(
+			root.lastIndexOf(':') + 1,
+		)}/${dbName}.db`;
+		return copyFile(originalDbPath, localDbPath).then(() => {
+			this.addLog(`DB File copied to ${localDbPath}`);
+		});
+	};
+
+	copyDBToOriginal = () => {
+		const root = decodeURIComponent(this.rootFolder);
+		const originalDbPath = `/storage/emulated/0/${root.substring(
+			root.lastIndexOf(':') + 1,
+		)}/${dbName}.db`;
+		return copyFile(localDbPath, originalDbPath);
 	};
 
 	setRootFolder = value => {
@@ -290,6 +303,39 @@ export class RootStore {
 		runInAction(() => {
 			this.activeFilters.albumIds.clear();
 			this.activeFilters.tagIds.clear();
+		});
+	};
+
+	removeTagFromPhoto = (tagid, imageid) => {
+		return new Promise((resolve, reject) => {
+			let imagetags = this.imagetags.get(imageid);
+			if (imagetags) {
+				imagetags = imagetags.filter(tag => tag.tagid !== tagid);
+				runInAction(() => {
+					this.imagetags.set(imageid, imagetags);
+				});
+				this.db.transaction(tx => {
+					tx.executeSql(
+						'DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?',
+						[imageid, tagid],
+						(t, res) => {
+							tx.commit();
+							resolve();
+							// have to make this work and not prevent promises from resolving
+							// this.copyDBToOriginal();
+							// this.selectPhotos({
+							// 	albumIds: [...this.activeFilters.albumIds],
+							// 	tagIds: [...this.activeFilters.tagIds],
+							// });
+						},
+						er => {
+							this.addLog(`REMOVE TAGS FROM PHOTO ERR: ${er.message}`);
+							tx.rollback();
+							reject();
+						},
+					);
+				});
+			}
 		});
 	};
 }

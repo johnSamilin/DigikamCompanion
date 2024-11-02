@@ -2,6 +2,7 @@ import { Button, Text, ToastAndroid, View } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import Share from 'react-native-share';
+import { Tag } from './Tag';
 
 const styles = {
 	wrapper: {
@@ -25,7 +26,7 @@ const styles = {
 	},
 };
 
-export const ImageInfo = observer(({ currentImage }) => {
+export const ImageInfo = observer(({ currentImage, onTagClick }) => {
 	const store = useStore();
 
 	const handleShare = async () => {
@@ -48,10 +49,13 @@ export const ImageInfo = observer(({ currentImage }) => {
 				{currentImage?.uri.replace(store.fileUriPrefix, '')}
 			</Text>
 			<Text style={styles.name}>
-				{store.imagetags
-					.get(currentImage.id)
-					?.map(t => t.tagname)
-					.join(', ')}
+				{store.imagetags.get(currentImage.id)?.map(t => (
+					<Tag
+						key={t.tagid}
+						name={t.tagname}
+						onClick={() => onTagClick(t.tagid)}
+					/>
+				))}
 			</Text>
 			<View style={styles.button}>
 				<Button title="Share" onPress={handleShare} />
