@@ -156,8 +156,7 @@ export const Gallery = observer(({ navigation }) => {
 					/>
 				) : (
 					<View style={styles.emptyState}>
-						<Text>А фото-то и нет...</Text>
-						<Text>Ну или запрос в БД еще не завершен</Text>
+						<Text>Откройте фильтры, чтобы показать фото</Text>
 					</View>
 				)}
 			</>

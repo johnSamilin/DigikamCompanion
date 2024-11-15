@@ -16,6 +16,30 @@ import {
 } from 'manage-external-storage';
 import { useEffect, useState } from 'react';
 
+const styles = {
+	centerWrapper: {
+		display: 'flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		padding: 10,
+		height: '100%',
+	},
+	text: {
+		color: 'black',
+		textAlign: 'center',
+		marginBottom: 10,
+	},
+	drawerText: {
+		fontFamily: 'TT Tricks Trial Bold',
+		fontSize: 20,
+		color: 'black',
+		padding: 10,
+	},
+	drawer: {
+		padding: 20,
+	},
+};
+
 function Startup({ navigation }) {
 	const renderDrawerContent = () => {
 		return (
@@ -28,20 +52,8 @@ function Startup({ navigation }) {
 					);
 				}}
 			>
-				<View
-					style={{
-						padding: 20,
-					}}
-				>
-					<Text
-						style={{
-							fontFamily: 'TT Tricks Trial Bold',
-							fontSize: 20,
-							color: 'black',
-						}}
-					>
-						Системные сообщения
-					</Text>
+				<View style={styles.drawer}>
+					<Text style={styles.drawerText}>Системные сообщения</Text>
 				</View>
 			</TouchableOpacity>
 		);
@@ -68,12 +80,24 @@ function Startup({ navigation }) {
 					{isAllowedToManage === 0 && <Text>Проверка разрешений</Text>}
 					{isAllowedToManage === 1 &&
 						(!store.rootFolder ? (
-							<FolderPicker />
+							<View style={styles.centerWrapper}>
+								<Text style={styles.text}>
+									Теперь нужно указать корневую папку, где находятся фотографии
+									(и база данных Digikam).
+								</Text>
+								<FolderPicker />
+							</View>
 						) : (
 							<Gallery navigation={navigation} />
 						))}
 					{isAllowedToManage === 2 && (
-						<Button onPress={givePermission} title="Дать разрешение" />
+						<View style={styles.centerWrapper}>
+							<Text style={styles.text}>
+								У приложения нет разрешения на управление файлами. Без него не
+								получится.
+							</Text>
+							<Button onPress={givePermission} title="Дать разрешение" />
+						</View>
 					)}
 				</View>
 			</DrawerLayoutAndroid>

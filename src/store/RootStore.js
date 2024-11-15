@@ -90,7 +90,7 @@ export class RootStore {
 							this.readAlbums(),
 							this.readTags(),
 							this.readImageTags(),
-						]).then(() => this.selectPhotos());
+						]); // .then(() => this.selectPhotos()); // temporarily increasing startup performance
 					},
 					err => {
 						this.addLog(`OPEN DATABASE ERROR: ${JSON.stringify(err)}`);

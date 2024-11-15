@@ -14,6 +14,9 @@ import { Album } from '@/components/molecules';
 import { useMemo } from 'react';
 
 const styles = {
+	wrapper: {
+		padding: 10,
+	},
 	bottomBtn: {
 		flexGrow: 1,
 	},
@@ -70,7 +73,7 @@ function Filter({ navigation }) {
 
 	return (
 		<SafeScreen>
-			<ScrollView>
+			<ScrollView style={styles.wrapper}>
 				<Text style={styles.sectionTitle}>Tags</Text>
 				{[...store.tags].map(([id, tag]) => (
 					<Album

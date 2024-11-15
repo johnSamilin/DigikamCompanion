@@ -21,7 +21,7 @@ export const FolderPicker = observer(() => {
 	};
 	return (
 		<View testID="brand-img-wrapper">
-			<Button onPress={pickDir} title="Pick root directory" />
+			<Button onPress={pickDir} title="Выбрать папку" />
 		</View>
 	);
 });
