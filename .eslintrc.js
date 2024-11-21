@@ -58,7 +58,7 @@ module.exports = {
 			'error',
 			{
 				printWidth: 80,
-				endOfLine: 'lf',
+				endOfLine: 'crlf',
 				tabWidth: 2,
 				indentStyle: 'space',
 				useTabs: true,

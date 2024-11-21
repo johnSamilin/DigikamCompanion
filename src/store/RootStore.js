@@ -36,6 +36,9 @@ export class RootStore {
 	/** @type {{ id: number; album: number; name: string; uri: string; } []} */
 	images = [];
 
+	/** @type {Set<number>} */
+	userSelectedImages = new Set();
+
 	isPermissionDenied = true;
 
 	log = [];
@@ -207,6 +210,7 @@ export class RootStore {
 	};
 
 	selectPhotos = (activeFilters = { albumIds: [], tagIds: [] }) => {
+		this.dropUserSelection();
 		// TODO: фотки вне альбомов?
 		const constraints = ['album is not null'];
 
@@ -221,8 +225,9 @@ export class RootStore {
 			);
 		}
 
-		const sql = `select id, album, name from Images where ${constraints.length > 0 ? constraints.join(' and ') : '1'
-			} order by name desc`;
+		const sql = `select id, album, name from Images where ${
+			constraints.length > 0 ? constraints.join(' and ') : '1'
+		} order by name desc`;
 		this.addLog(sql);
 
 		this.db.transaction(tx => {
@@ -237,8 +242,9 @@ export class RootStore {
 					try {
 						for (let index = 0; index < res.rows.length; index++) {
 							const image = res.rows.item(index);
-							image.uri = `${this.fileUriPrefix}${fixedRoot}${this.albums.get(image.album).relativePath
-								}/${image.name}`;
+							image.uri = `${this.fileUriPrefix}${fixedRoot}${
+								this.albums.get(image.album).relativePath
+							}/${image.name}`;
 							images.push(image);
 						}
 					} catch (er) {
@@ -337,6 +343,22 @@ export class RootStore {
 				});
 			}
 		});
+	};
+
+	dropUserSelection = () => {
+		this.userSelectedImages.clear();
+	};
+
+	addAllToUserSelection = () => {
+		this.userSelectedImages = new Set(this.images.map(image => image.id));
+	};
+
+	addToUserSelection = id => {
+		this.userSelectedImages.add(id);
+	};
+
+	removeFromUserSelection = id => {
+		this.userSelectedImages.delete(id);
 	};
 }
 

@@ -1,4 +1,4 @@
-import { Button, Text, ToastAndroid, View } from 'react-native';
+import { Button, Text, View } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import Share from 'react-native-share';
@@ -36,10 +36,14 @@ export const ImageInfo = observer(({ currentImage, onTagClick }) => {
 			});
 		} catch (error) {
 			store.addLog(error.message);
-			ToastAndroid.show(
-				'Что-то не так. см. Системные сообщения',
-				ToastAndroid.LONG,
-			);
+		}
+	};
+
+	const toggleSelection = () => {
+		if (store.userSelectedImages.has(currentImage.id)) {
+			store.removeFromUserSelection(currentImage.id);
+		} else {
+			store.addToUserSelection(currentImage.id);
 		}
 	};
 
@@ -58,8 +62,20 @@ export const ImageInfo = observer(({ currentImage, onTagClick }) => {
 				))}
 			</Text>
 			<View style={styles.button}>
-				<Button title="Share" onPress={handleShare} />
+				<Button title="Поделиться" onPress={handleShare} />
 			</View>
+			{store.userSelectedImages.size > 0 && (
+				<View style={styles.button}>
+					<Button
+						onPress={toggleSelection}
+						title={
+							store.userSelectedImages.has(currentImage.id)
+								? 'Развыбрать'
+								: 'Выбрать'
+						}
+					/>
+				</View>
+			)}
 		</View>
 	);
 });

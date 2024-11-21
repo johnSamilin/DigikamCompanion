@@ -34,7 +34,7 @@ const styles = {
 		bottom: 60,
 	},
 	button: {
-		marginLeft: 20,
+		marginLeft: 10,
 	},
 };
 
@@ -97,11 +97,9 @@ function Filter({ navigation }) {
 			<View style={styles.buttonsWrapper}>
 				<Button title="Найти" onPress={search} />
 				{store.isFilterApplied && (
-					<Button
-						style={styles.button}
-						title="Сбросить"
-						onPress={store.resetFilters}
-					/>
+					<View style={styles.button}>
+						<Button title="Сбросить" onPress={store.resetFilters} />
+					</View>
 				)}
 			</View>
 		</SafeScreen>

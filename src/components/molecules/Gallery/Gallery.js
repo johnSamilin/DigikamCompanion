@@ -2,19 +2,16 @@ import {
 	Button,
 	Dimensions,
 	Image,
-	SafeAreaView,
-	ScrollView,
 	Text,
-	ToastAndroid,
 	View,
 	VirtualizedList,
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { CommonActions } from '@react-navigation/native';
-import { Filters } from '../Filters/Filters';
+import Share from 'react-native-share';
 
 const screenWidth = Dimensions.get('window').width;
 const itemsPerRowPortrat = 4;
@@ -48,6 +45,13 @@ const styles = {
 		right: 20,
 		bottom: 60,
 	},
+	titleWrapper: {
+		display: 'flex',
+		flexDirection: 'row',
+		justifyContent: 'space-around',
+		alignItems: 'center',
+		width: '100%',
+	},
 	title: {
 		fontSize: 15,
 		fontWeight: 'bold',
@@ -64,21 +68,44 @@ const styles = {
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	pictureSelected: {
+		opacity: 0.25,
+	},
 	emptyState: {
 		flexGrow: 1,
 		display: 'flex',
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	button: {
+		margin: 5,
+	},
 };
 
-function Picture({ uri, name, onPress }) {
+const Picture = observer(({ id, uri, name, onPress }) => {
 	const isExist = useRef(true);
+	const store = useStore();
+
+	const select = useCallback(() => {
+		store.addToUserSelection(id);
+	}, []);
+
+	const handlePress = useCallback(() => {
+		if (store.userSelectedImages.has(id)) {
+			store.removeFromUserSelection(id);
+		} else {
+			onPress();
+		}
+	}, []);
 
 	return isExist.current ? (
-		<TouchableOpacity onPress={onPress}>
+		<TouchableOpacity onPress={handlePress} onLongPress={select}>
 			<Image
-				style={styles.picture}
+				style={
+					store.userSelectedImages.has(id)
+						? { ...styles.picture, ...styles.pictureSelected }
+						: styles.picture
+				}
 				source={{ isStatic: true, uri }}
 				onError={() => {
 					isExist.current = false;
@@ -91,7 +118,7 @@ function Picture({ uri, name, onPress }) {
 			<Text>{name}</Text>
 		</View>
 	);
-}
+});
 
 function Row({ item, onPress }) {
 	return (
@@ -102,6 +129,7 @@ function Row({ item, onPress }) {
 					uri={pic.uri}
 					name={pic.name}
 					onPress={() => onPress(pic.id)}
+					id={pic?.id}
 				/>
 			))}
 		</View>
@@ -130,11 +158,43 @@ export const Gallery = observer(({ navigation }) => {
 		);
 	};
 
+	const handleShare = async () => {
+		try {
+			await Share.open({
+				urls: store.images.reduce((acc, image) => {
+					if (store.userSelectedImages.has(image.id)) {
+						acc.push(image.uri);
+					}
+
+					return acc;
+				}, []),
+			});
+		} catch (error) {
+			store.addLog(error.message);
+		}
+	};
+
 	return (
 		<View style={styles.wrapper}>
-			{/* <RNGallery data={store.images.map(i => i.uri)} /> */}
 			<>
-				<Text style={styles.title}>{store.images.length} фото</Text>
+				<View style={styles.titleWrapper}>
+					{store.userSelectedImages.size > 0 && (
+						<TouchableOpacity onPress={store.addAllToUserSelection}>
+							<Text style={styles.title}>Выбрать все</Text>
+						</TouchableOpacity>
+					)}
+					<Text style={styles.title}>
+						{store.userSelectedImages.size > 0
+							? `${store.userSelectedImages.size} / `
+							: ''}
+						{store.images.length} фото
+					</Text>
+					{store.userSelectedImages.size > 0 && (
+						<TouchableOpacity onPress={store.dropUserSelection}>
+							<Text style={styles.title}>Развыбрать все</Text>
+						</TouchableOpacity>
+					)}
+				</View>
 				{store.images.length > 0 ? (
 					<VirtualizedList
 						initialNumToRender={4}
@@ -161,7 +221,14 @@ export const Gallery = observer(({ navigation }) => {
 				)}
 			</>
 			<View style={styles.filterBtn}>
-				<Button onPress={openFilters} title="Фильтр" />
+				<View style={styles.button}>
+					<Button onPress={openFilters} title="Фильтр" />
+				</View>
+				{store.userSelectedImages.size > 0 && (
+					<View style={styles.button}>
+						<Button onPress={handleShare} title="Поделиться" />
+					</View>
+				)}
 			</View>
 			{store.isPermissionDenied && (
 				<Text>
