@@ -313,24 +313,62 @@ export class RootStore {
   addAlbumToFilters = id => {
     runInAction(() => {
       this.activeFilters.albumIds.add(id);
+      // Add all child albums
+      this.albums.forEach(album => {
+        if (album.relativePath.startsWith(this.albums.get(id).relativePath + '/')) {
+          this.activeFilters.albumIds.add(album.id);
+        }
+      });
     });
   };
 
   removeAlbumFromFilters = id => {
     runInAction(() => {
       this.activeFilters.albumIds.delete(id);
+      // Remove all child albums
+      this.albums.forEach(album => {
+        if (album.relativePath.startsWith(this.albums.get(id).relativePath + '/')) {
+          this.activeFilters.albumIds.delete(album.id);
+        }
+      });
     });
   };
 
   addTagToFilters = id => {
     runInAction(() => {
       this.activeFilters.tagIds.add(id);
+      // Add all child tags recursively
+      const addChildTags = (tag) => {
+        if (tag.children) {
+          tag.children.forEach(child => {
+            this.activeFilters.tagIds.add(child.id);
+            addChildTags(child);
+          });
+        }
+      };
+      const tag = this.tags.get(id);
+      if (tag) {
+        addChildTags(tag);
+      }
     });
   };
 
   removeTagFromFilters = id => {
     runInAction(() => {
       this.activeFilters.tagIds.delete(id);
+      // Remove all child tags recursively
+      const removeChildTags = (tag) => {
+        if (tag.children) {
+          tag.children.forEach(child => {
+            this.activeFilters.tagIds.delete(child.id);
+            removeChildTags(child);
+          });
+        }
+      };
+      const tag = this.tags.get(id);
+      if (tag) {
+        removeChildTags(tag);
+      }
     });
   };
 
