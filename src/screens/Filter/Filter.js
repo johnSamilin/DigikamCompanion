@@ -1,7 +1,6 @@
 import {
   Text,
   View,
-  Button,
   ScrollView,
   Pressable,
   useWindowDimensions,
@@ -10,7 +9,7 @@ import { SafeScreen } from '@/components/template';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import { CommonActions } from '@react-navigation/native';
-import { Album, TagTree } from '@/components/molecules';
+import { Album, TagTree, Button } from '@/components/molecules';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import PagerView from 'react-native-pager-view';
 import { styles } from './styles';
@@ -118,17 +117,18 @@ function Filter({ navigation }) {
         </PagerView>
 
         <View style={styles.buttonsWrapper}>
-          <View style={styles.button}>
-            <Button title="Search" onPress={search} />
-          </View>
+          <Button 
+            title="Search" 
+            onPress={search}
+            color="#00ff00"
+            textColor="#000000"
+          />
           {store.isFilterApplied && (
-            <View style={styles.button}>
-              <Button
-                title="Reset"
-                onPress={store.resetFilters}
-                color="#ef4444"
-              />
-            </View>
+            <Button
+              title="Reset"
+              onPress={store.resetFilters}
+              color="#ff0000"
+            />
           )}
         </View>
       </View>
