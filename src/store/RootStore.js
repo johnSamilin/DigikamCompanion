@@ -174,6 +174,17 @@ export class RootStore {
           [],
           (t, res) => {
             const tree = new Map();
+            const childToParent = new Map(); // Track parent-child relationships
+
+            // First pass: Build parent-child relationships
+            for (let index = 0; index < res.rows.length; index++) {
+              const { id, pid } = res.rows.item(index);
+              if (pid > 0) {
+                childToParent.set(id, pid);
+              }
+            }
+
+            // Second pass: Only add tags to tree if they have no parent
             for (let index = 0; index < res.rows.length; index++) {
               const { id, pid } = res.rows.item(index);
               if (this.tags.has(id)) {
@@ -181,11 +192,13 @@ export class RootStore {
                 if (pid > 0 && this.tags.has(pid)) {
                   const parent = this.tags.get(pid);
                   parent.children.push(tag);
-                } else {
+                } else if (!childToParent.has(id)) {
+                  // Only add to root if tag has no parent
                   tree.set(id, tag);
                 }
               }
             }
+
             this.addLog('READ TAGS TREE');
             runInAction(() => {
               this.tagTree = tree;
