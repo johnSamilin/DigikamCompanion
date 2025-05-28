@@ -174,30 +174,27 @@ export class RootStore {
           [],
           (t, res) => {
             const tree = new Map();
-            const childToParent = new Map(); // Track parent-child relationships
+            const processedTags = new Set();
 
             // First pass: Build parent-child relationships
             for (let index = 0; index < res.rows.length; index++) {
               const { id, pid } = res.rows.item(index);
-              if (pid > 0) {
-                childToParent.set(id, pid);
-              }
-            }
-
-            // Second pass: Only add tags to tree if they have no parent
-            for (let index = 0; index < res.rows.length; index++) {
-              const { id, pid } = res.rows.item(index);
               if (this.tags.has(id)) {
-                const tag = this.tags.get(id);
                 if (pid > 0 && this.tags.has(pid)) {
                   const parent = this.tags.get(pid);
-                  parent.children.push(tag);
-                } else if (!childToParent.has(id)) {
-                  // Only add to root if tag has no parent
-                  tree.set(id, tag);
+                  const child = this.tags.get(id);
+                  parent.children.push(child);
+                  processedTags.add(id);
                 }
               }
             }
+
+            // Second pass: Add remaining tags to root level
+            this.tags.forEach((tag, id) => {
+              if (!processedTags.has(id)) {
+                tree.set(id, tag);
+              }
+            });
 
             this.addLog('READ TAGS TREE');
             runInAction(() => {
