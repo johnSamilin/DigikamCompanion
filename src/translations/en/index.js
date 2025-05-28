@@ -1,4 +1,30 @@
-export { default as common } from './common.json';
-export { default as example } from './example.json';
-export { default as startup } from './startup.json';
-export { default as welcome } from './welcome.json';
+export default {
+  translation: {
+    common: {
+      selectAll: 'Select all',
+      unselectAll: 'Unselect all',
+      photos: 'photos',
+      filter: 'Filter',
+      share: 'Share',
+      selected: 'Selected',
+      fileNotFound: 'File not found',
+      openFilters: 'Open filters to show photos',
+      permissionRequired: 'Please allow the app to access all files (in app settings)',
+      selectFolder: 'Select folder',
+      folderDescription: 'Specify the root folder where photos (and Digikam database) are located',
+      checkingPermissions: 'Checking permissions',
+      permissionDenied: 'The app does not have permission to manage files. It won\'t work without it.',
+      grantPermission: 'Grant permission',
+      systemMessages: 'System messages',
+      tags: 'Tags',
+      albums: 'Albums',
+      search: 'Search',
+      reset: 'Reset',
+      close: 'Close',
+      findAllPhotos: 'Find all photos',
+      remove: 'Remove',
+      processing: 'Processing...',
+      tag: 'Tag',
+    },
+  },
+};
