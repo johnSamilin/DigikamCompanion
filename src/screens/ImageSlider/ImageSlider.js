@@ -5,6 +5,7 @@ import Gallery from 'react-native-awesome-gallery';
 import { useState } from 'react';
 import { Modal, Text, ToastAndroid, View } from 'react-native';
 import { ImageInfo } from '@/components/molecules/ImageInfo';
+import { Button } from '@/components/molecules/Button';
 import { styles } from './styles';
 
 function ImageSlider({ route }) {

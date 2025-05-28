@@ -1,5 +1,4 @@
 import {
-  Button,
   Dimensions,
   Image,
   Text,
@@ -12,11 +11,12 @@ import { useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { CommonActions } from '@react-navigation/native';
 import Share from 'react-native-share';
+import { Button } from '../Button';
 import { styles } from './styles';
 
 const screenWidth = Dimensions.get('window').width;
-const itemsPerRowPortrat = 3; // Reduced from 4 to 3 for better performance
-const itemsPerRowLandscape = 4; // Reduced from 6 to 4
+const itemsPerRowPortrat = 3;
+const itemsPerRowLandscape = 4;
 let itemsPerRow = itemsPerRowPortrat;
 let w = screenWidth / itemsPerRow;
 
@@ -195,7 +195,7 @@ export const Gallery = observer(({ navigation }) => {
       </>
       <View style={styles.filterBtn}>
         <View style={styles.button}>
-          <Button onPress={openFilters} title="Фильтр" />
+          <Button onPress={openFilters} title="Фильтр" color="#00ff00" textColor="#000000" />
         </View>
         {store.userSelectedImages.size > 0 && (
           <View style={styles.button}>
@@ -204,7 +204,7 @@ export const Gallery = observer(({ navigation }) => {
         )}
       </View>
       {store.isPermissionDenied && (
-        <Text>
+        <Text style={styles.emptyStateText}>
           Пожалуйста, разрешите приложению доступ ко всем файлам (в настройках
           приложения)
         </Text>
