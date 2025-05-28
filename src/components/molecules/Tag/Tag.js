@@ -1,4 +1,4 @@
-```javascript
+
 import { Pressable, Text } from 'react-native';
 import { styles } from './styles';
 
@@ -9,4 +9,3 @@ export function Tag({ onClick, name }) {
     </Pressable>
   );
 }
-```

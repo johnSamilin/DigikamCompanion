@@ -1,16 +1,4 @@
-```javascript
-import { StyleSheet, Dimensions } from 'react-native';
-
-const screenWidth = Dimensions.get('window').width;
-const itemsPerRowPortrat = 4;
-const itemsPerRowLandscape = 6;
-let itemsPerRow = itemsPerRowPortrat;
-let w = screenWidth / itemsPerRow;
-
-Dimensions.addEventListener('change', ({ window: { width } }) => {
-  itemsPerRow = width < width ? itemsPerRowPortrat : itemsPerRowLandscape;
-  w = screenWidth / itemsPerRow;
-});
+import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
   wrapper: {
@@ -42,11 +30,6 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1a1a1a',
     letterSpacing: 0.3,
-  },
-  picture: {
-    width: w,
-    height: w,
-    backgroundColor: '#ffffff',
   },
   pictureSelected: {
     opacity: 0.25,
@@ -83,4 +66,3 @@ export const styles = StyleSheet.create({
     marginBottom: 8,
   }
 });
-```

@@ -1,4 +1,3 @@
-```javascript
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
@@ -22,4 +21,3 @@ export const styles = StyleSheet.create({
     flexDirection: 'column',
   }
 });
-```

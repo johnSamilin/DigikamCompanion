@@ -76,7 +76,7 @@ function Startup({ navigation }) {
 	return (
 		<SafeScreen>
 			<DrawerLayoutAndroid renderNavigationView={renderDrawerContent}>
-				<View>
+				<View style={{ flex: 1 }}>
 					{isAllowedToManage === 0 && <Text>Проверка разрешений</Text>}
 					{isAllowedToManage === 1 &&
 						(!store.rootFolder ? (
