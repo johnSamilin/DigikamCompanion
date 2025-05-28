@@ -11,7 +11,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { CommonActions } from '@react-navigation/native';
 import Share from 'react-native-share';
-import { Button } from '../Button';
+import { Button } from '@/components/molecules';
 import { styles } from './styles';
 
 const screenWidth = Dimensions.get('window').width;

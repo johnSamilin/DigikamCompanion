@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import Share from 'react-native-share';
 import { Tag } from './Tag';
-import { Button } from './Button';
+import { Button } from '@/components/molecules';
 import { styles } from './ImageInfo.styles';
 
 export const ImageInfo = observer(({ currentImage, onTagClick }) => {
