@@ -23,13 +23,13 @@ function Filter({ navigation }) {
 
   const albums = useMemo(() => {
     const list = [];
-    store.albums.forEach(a => list.push(a));
+    store.albums.forEach(a => list.unshift(a));
     return list;
   }, [store.albums]);
 
   const tags = useMemo(() => {
     const list = [];
-    store.tags.forEach(tag => list.push(tag));
+    store.tags.forEach(tag => list.unshift(tag));
     return list;
   }, [store.tags]);
 
