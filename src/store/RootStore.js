@@ -32,7 +32,7 @@ export class RootStore {
     tagIds: new Set(),
   };
   orientaion = 'P';
-  fileUriPrefix = `file://${ExternalStorageDirectoryPath}/`;
+  fileUriPrefix = `file://${this.normalizedRootPath}/`;
 
   get isFilterApplied() {
     return (
