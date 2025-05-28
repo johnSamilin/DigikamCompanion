@@ -1,44 +1,45 @@
-
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
-  wrapper: {
+  container: {
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  content: {
-    padding: 16,
+  tabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e5e5',
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 16,
-    marginTop: 24,
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#2563eb',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  activeTabText: {
+    color: '#2563eb',
+    fontWeight: '600',
+  },
+  content: {
+    flex: 1,
   },
   buttonsWrapper: {
     flexDirection: 'row',
-    position: 'absolute',
-    right: 20,
-    bottom: 30,
+    justifyContent: 'center',
     gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e5e5',
   },
   button: {
-    minWidth: 100,
+    minWidth: 120,
   },
-  buttonContainer: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  resetButton: {
-    backgroundColor: '#ef4444',
-  }
 });
