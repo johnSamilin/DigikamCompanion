@@ -1,27 +1,25 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, StyleSheet } from 'react-native';
 
-const styles = {
-	wrapper: {
-		paddingTop: 5,
-		paddingBottom: 5,
-		paddingLeft: 5,
-		paddingRight: 5,
-		alignItems: 'center',
-		borderBottomColor: 'black',
-		borderBottomWidth: 2,
-	},
-	name: {
-		textAlign: 'center',
-		color: 'black',
-	},
-};
+const styles = StyleSheet.create({
+  wrapper: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  name: {
+    fontSize: 14,
+    color: '#4b5563',
+    fontWeight: '500',
+  },
+});
 
 export function Tag({ onClick, name }) {
-	return (
-		<View style={styles.wrapper}>
-			<Pressable onPress={onClick}>
-				<Text style={styles.name}>{name}</Text>
-			</Pressable>
-		</View>
-	);
+  return (
+    <Pressable style={styles.wrapper} onPress={onClick}>
+      <Text style={styles.name}>{name}</Text>
+    </Pressable>
+  );
 }
