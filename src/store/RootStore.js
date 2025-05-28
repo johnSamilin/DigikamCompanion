@@ -19,6 +19,7 @@ export class RootStore {
   db;
   albums = new Map();
   tags = new Map();
+  tagTree = new Map();
   imagetags = new Map();
   images = [];
   userSelectedImages = new Set();
@@ -86,6 +87,7 @@ export class RootStore {
             Promise.all([
               this.readAlbums(),
               this.readTags(),
+              this.readTagsTree(),
               this.readImageTags(),
             ]).then(resolve);
           },
@@ -147,7 +149,7 @@ export class RootStore {
             const tags = new Map();
             for (let index = 0; index < res.rows.length; index++) {
               const tag = res.rows.item(index);
-              tags.set(tag.id, tag);
+              tags.set(tag.id, { ...tag, children: [] });
             }
             this.addLog('READ TAGS');
             runInAction(() => {
@@ -157,6 +159,41 @@ export class RootStore {
           },
           (_, er) => {
             this.addLog(`SELECT TAGS ERR: ${er.message}`);
+            reject(er);
+          },
+        );
+      });
+    });
+  };
+
+  readTagsTree = () => {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'SELECT id, pid from TagsTree',
+          [],
+          (t, res) => {
+            const tree = new Map();
+            for (let index = 0; index < res.rows.length; index++) {
+              const { id, pid } = res.rows.item(index);
+              if (this.tags.has(id)) {
+                const tag = this.tags.get(id);
+                if (pid > 0 && this.tags.has(pid)) {
+                  const parent = this.tags.get(pid);
+                  parent.children.push(tag);
+                } else {
+                  tree.set(id, tag);
+                }
+              }
+            }
+            this.addLog('READ TAGS TREE');
+            runInAction(() => {
+              this.tagTree = tree;
+            });
+            resolve();
+          },
+          (_, er) => {
+            this.addLog(`SELECT TAGS TREE ERR: ${er.message}`);
             reject(er);
           },
         );

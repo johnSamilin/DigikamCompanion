@@ -10,7 +10,7 @@ import { SafeScreen } from '@/components/template';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import { CommonActions } from '@react-navigation/native';
-import { Album } from '@/components/molecules';
+import { Album, TagTree } from '@/components/molecules';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import PagerView from 'react-native-pager-view';
 import { styles } from './styles';
@@ -27,11 +27,11 @@ function Filter({ navigation }) {
     return list;
   }, [store.albums]);
 
-  const tags = useMemo(() => {
+  const rootTags = useMemo(() => {
     const list = [];
-    store.tags.forEach(tag => list.unshift(tag));
+    store.tagTree.forEach(tag => list.unshift(tag));
     return list;
-  }, [store.tags]);
+  }, [store.tagTree]);
 
   const search = useCallback(() => {
     store.selectPhotos({
@@ -95,11 +95,10 @@ function Filter({ navigation }) {
           onPageSelected={onPageSelected}
         >
           <ScrollView key="1" style={{ width }}>
-            {tags.map(tag => (
-              <Album
+            {rootTags.map(tag => (
+              <TagTree
                 key={tag.id}
-                id={tag.id}
-                relativePath={tag.name}
+                tag={tag}
                 isSelected={store.activeFilters.tagIds.has(tag.id)}
                 onChangeState={toggleTag}
               />
