@@ -107,14 +107,14 @@ export class RootStore {
   };
 
   copyDBToCache = () => {
-    const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
+    const originalDbPath = `${this.normalizedRootPath}/${dbName}.db`;
     return copyFile(originalDbPath, localDbPath).then(() => {
       this.addLog(`DB File copied to ${localDbPath}`);
     });
   };
 
   copyDBToOriginal = () => {
-    const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
+    const originalDbPath = `${this.normalizedRootPath}/${dbName}.db`;
     return copyFile(localDbPath, originalDbPath);
   };
 
