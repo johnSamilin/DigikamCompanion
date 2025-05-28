@@ -23,7 +23,11 @@ export function Album({
       >
         <View style={styles.innerContainer}>
           <Text style={styles.album}>{name}</Text>
-          {isSelected && <Text style={styles.selected}>Selected</Text>}
+          {isSelected && (
+            <View style={styles.checkmark}>
+              <Text style={styles.checkmarkText}>✓</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
