@@ -8,15 +8,15 @@ import {
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { CommonActions } from '@react-navigation/native';
 import Share from 'react-native-share';
 import { styles } from './styles';
 
 const screenWidth = Dimensions.get('window').width;
-const itemsPerRowPortrat = 4;
-const itemsPerRowLandscape = 6;
+const itemsPerRowPortrat = 3; // Reduced from 4 to 3 for better performance
+const itemsPerRowLandscape = 4; // Reduced from 6 to 4
 let itemsPerRow = itemsPerRowPortrat;
 let w = screenWidth / itemsPerRow;
 
@@ -49,31 +49,39 @@ const Picture = observer(({ id, uri, name, onPress }) => {
     } else {
       onPress();
     }
-  }, []);
+  }, [store.userSelectedImages]);
 
-  return isExist.current ? (
+  const imageStyle = useMemo(() => 
+    store.userSelectedImages.has(id)
+      ? { ...styles.picture, ...styles.pictureSelected }
+      : styles.picture
+  , [store.userSelectedImages.has(id)]);
+
+  if (!isExist.current) {
+    return (
+      <View style={styles.picture}>
+        <Text>Этого файла нет на диске</Text>
+        <Text>{name}</Text>
+      </View>
+    );
+  }
+
+  return (
     <TouchableOpacity onPress={handlePress} onLongPress={select}>
       <Image
-        style={
-          store.userSelectedImages.has(id)
-            ? { ...styles.picture, ...styles.pictureSelected }
-            : styles.picture
-        }
+        style={imageStyle}
         source={{ isStatic: true, uri }}
         onError={() => {
           isExist.current = false;
         }}
+        loading="lazy"
+        fadeDuration={0}
       />
     </TouchableOpacity>
-  ) : (
-    <View style={styles.picture}>
-      <Text>Этого файла нет на диске</Text>
-      <Text>{name}</Text>
-    </View>
   );
 });
 
-function Row({ item, onPress }) {
+const Row = observer(({ item, onPress }) => {
   return (
     <View style={styles.row}>
       {item.map((pic, i) => (
@@ -87,20 +95,20 @@ function Row({ item, onPress }) {
       ))}
     </View>
   );
-}
+});
 
 export const Gallery = observer(({ navigation }) => {
   const store = useStore();
 
-  const openFilters = () => {
+  const openFilters = useCallback(() => {
     navigation.dispatch(
       CommonActions.navigate({
         name: 'Filter',
       }),
     );
-  };
+  }, [navigation]);
 
-  const showImage = imageId => {
+  const showImage = useCallback((imageId) => {
     navigation.dispatch(
       CommonActions.navigate({
         name: 'ImageSlider',
@@ -109,23 +117,37 @@ export const Gallery = observer(({ navigation }) => {
         },
       }),
     );
-  };
+  }, [navigation]);
 
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     try {
-      await Share.open({
-        urls: store.images.reduce((acc, image) => {
-          if (store.userSelectedImages.has(image.id)) {
-            acc.push(image.uri);
-          }
+      const urls = store.images.reduce((acc, image) => {
+        if (store.userSelectedImages.has(image.id)) {
+          acc.push(image.uri);
+        }
+        return acc;
+      }, []);
 
-          return acc;
-        }, []),
-      });
+      await Share.open({ urls });
     } catch (error) {
       store.addLog(error.message);
     }
-  };
+  }, [store.images, store.userSelectedImages]);
+
+  const getItem = useCallback((data, index) => 
+    store.images.slice(
+      index * itemsPerRow,
+      index * itemsPerRow + itemsPerRow,
+    )
+  , [store.images]);
+
+  const getItemCount = useCallback(() => 
+    Math.ceil(store.images.length / itemsPerRow)
+  , [store.images.length]);
+
+  const keyExtractor = useCallback(item => 
+    item[0]?.uri || Math.random().toString()
+  , []);
 
   return (
     <View style={styles.wrapper}>
@@ -150,7 +172,10 @@ export const Gallery = observer(({ navigation }) => {
         </View>
         {store.images.length > 0 ? (
           <VirtualizedList
-            initialNumToRender={4}
+            initialNumToRender={2}
+            maxToRenderPerBatch={2}
+            windowSize={5}
+            removeClippedSubviews={true}
             renderItem={props => (
               <Row
                 {...props}
@@ -158,14 +183,9 @@ export const Gallery = observer(({ navigation }) => {
                 onPress={showImage}
               />
             )}
-            keyExtractor={item => item[0]?.uri}
-            getItemCount={() => Math.ceil(store.images.length)}
-            getItem={(data, index) =>
-              store.images.slice(
-                index * itemsPerRow,
-                index * itemsPerRow + itemsPerRow,
-              )
-            }
+            keyExtractor={keyExtractor}
+            getItemCount={getItemCount}
+            getItem={getItem}
           />
         ) : (
           <View style={styles.emptyState}>

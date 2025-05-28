@@ -1,12 +1,8 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { Dimensions, ToastAndroid } from 'react-native';
 import {
-  CachesDirectoryPath,
   copyFile,
   DocumentDirectoryPath,
-  ExternalDirectoryPath,
-  ExternalStorageDirectoryPath,
-  MainBundlePath,
 } from 'react-native-fs';
 import { MMKV } from 'react-native-mmkv';
 import SQLite from 'react-native-sqlite-storage';
@@ -15,6 +11,7 @@ const mmkv = new MMKV();
 const dbName = 'digikam4';
 const originalDbName = 'digikam4-original.db';
 const localDbPath = `${DocumentDirectoryPath}/${originalDbName}`;
+const BATCH_SIZE = 50;
 
 export class RootStore {
   rootFolder = null;
@@ -32,7 +29,7 @@ export class RootStore {
     tagIds: new Set(),
   };
   orientaion = 'P';
-  fileUriPrefix = `file://${this.normalizedRootPath}/`;
+  fileUriPrefix = `file://`;
 
   get isFilterApplied() {
     return (
@@ -43,22 +40,15 @@ export class RootStore {
   get normalizedRootPath() {
     if (!this.rootFolder) return null;
 
-    // Remove 'content://' or 'file://' prefix
     let path = decodeURIComponent(this.rootFolder);
     path = path.replace(/^(content|file):\/\//, '');
-
-    // Remove any leading slashes
     path = path.replace(/^\/+/, '');
-
-    // Handle Android storage paths
+    
     if (path.includes(':')) {
       path = path.substring(path.indexOf(':') + 1);
     }
-
-    // Remove any trailing slashes
-    path = path.replace(/\/+$/, '');
-
-    return path;
+    
+    return path.replace(/\/+$/, '');
   }
 
   constructor() {
@@ -67,6 +57,7 @@ export class RootStore {
     if (this.rootFolder) {
       this.getDBConnection();
     }
+    
     Dimensions.addEventListener('change', ({ window: { width, height } }) => {
       runInAction(() => {
         this.orientaion = width < height ? 'P' : 'L';
@@ -74,12 +65,14 @@ export class RootStore {
     });
   }
 
-  getDBConnection = () => {
-    this.copyDBToCache()
-      .then(() => {
-        runInAction(() => {
-          this.isPermissionDenied = false;
-        });
+  getDBConnection = async () => {
+    try {
+      await this.copyDBToCache();
+      runInAction(() => {
+        this.isPermissionDenied = false;
+      });
+
+      return new Promise((resolve, reject) => {
         SQLite.openDatabase(
           {
             name: dbName,
@@ -88,22 +81,20 @@ export class RootStore {
           database => {
             runInAction(() => {
               this.isReady = true;
+              this.db = database;
             });
-            this.db = database;
             Promise.all([
               this.readAlbums(),
               this.readTags(),
               this.readImageTags(),
-            ]);
+            ]).then(resolve);
           },
-          err => {
-            this.addLog(`OPEN DATABASE ERROR: ${JSON.stringify(err)}`);
-          },
+          reject,
         );
-      })
-      .catch(er => {
-        this.addLog(`\r\n${er.message}`);
       });
+    } catch (er) {
+      this.addLog(`\r\n${er.message}`);
+    }
   };
 
   copyDBToCache = () => {
@@ -111,11 +102,6 @@ export class RootStore {
     return copyFile(originalDbPath, localDbPath).then(() => {
       this.addLog(`DB File copied to ${localDbPath}`);
     });
-  };
-
-  copyDBToOriginal = () => {
-    const originalDbPath = `${this.normalizedRootPath}/${dbName}.db`;
-    return copyFile(localDbPath, originalDbPath);
   };
 
   setRootFolder = value => {
@@ -139,14 +125,12 @@ export class RootStore {
             this.addLog('READ ALBUMS');
             runInAction(() => {
               this.albums = fldrs;
-              resolve();
             });
-            tx.commit();
+            resolve();
           },
-          er => {
+          (_, er) => {
             this.addLog(`SELECT ALBUMS ERR: ${er.message}`);
-            tx.rollback();
-            reject();
+            reject(er);
           },
         );
       });
@@ -154,57 +138,65 @@ export class RootStore {
   };
 
   readTags = () => {
-    return this.db.transaction(tx => {
-      tx.executeSql(
-        'SELECT id, name from Tags where id > 25',
-        [],
-        (t, res) => {
-          const tags = new Map();
-          for (let index = 0; index < res.rows.length; index++) {
-            const tag = res.rows.item(index);
-            tags.set(tag.id, tag);
-          }
-          this.addLog('READ TAGS');
-          this.tags = tags;
-          tx.commit();
-        },
-        er => {
-          this.addLog(`SELECT TAGS ERR: ${er.message}`);
-          tx.rollback();
-        },
-      );
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'SELECT id, name from Tags where id > 25',
+          [],
+          (t, res) => {
+            const tags = new Map();
+            for (let index = 0; index < res.rows.length; index++) {
+              const tag = res.rows.item(index);
+              tags.set(tag.id, tag);
+            }
+            this.addLog('READ TAGS');
+            runInAction(() => {
+              this.tags = tags;
+            });
+            resolve();
+          },
+          (_, er) => {
+            this.addLog(`SELECT TAGS ERR: ${er.message}`);
+            reject(er);
+          },
+        );
+      });
     });
   };
 
   readImageTags = () => {
-    return this.db.transaction(tx => {
-      tx.executeSql(
-        'SELECT imageid, tagid from ImageTags',
-        [],
-        (t, res) => {
-          const imagetags = new Map();
-          for (let index = 0; index < res.rows.length; index++) {
-            const { imageid, tagid } = res.rows.item(index);
-            const tags = imagetags.has(imageid) ? imagetags.get(imageid) : [];
-            const tag = this.tags.get(tagid);
-            if (tag) {
-              tags.push({ tagid, tagname: tag.name });
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'SELECT imageid, tagid from ImageTags',
+          [],
+          (t, res) => {
+            const imagetags = new Map();
+            for (let index = 0; index < res.rows.length; index++) {
+              const { imageid, tagid } = res.rows.item(index);
+              const tags = imagetags.get(imageid) || [];
+              const tag = this.tags.get(tagid);
+              if (tag) {
+                tags.push({ tagid, tagname: tag.name });
+              }
+              imagetags.set(imageid, tags);
             }
-            imagetags.set(imageid, tags);
-          }
-          this.addLog('READ IMAGE TAGS');
-          this.imagetags = imagetags;
-          tx.commit();
-        },
-        er => {
-          this.addLog(`SELECT Image TAGS ERR: ${er.message}`);
-          tx.rollback();
-        },
-      );
+            this.addLog('READ IMAGE TAGS');
+            runInAction(() => {
+              this.imagetags = imagetags;
+            });
+            resolve();
+          },
+          (_, er) => {
+            this.addLog(`SELECT Image TAGS ERR: ${er.message}`);
+            reject(er);
+          },
+        );
+      });
     });
   };
 
-  selectPhotos = (activeFilters = { albumIds: [], tagIds: [] }) => {
+  selectPhotos = async (activeFilters = { albumIds: [], tagIds: [] }) => {
     this.dropUserSelection();
     const constraints = ['album is not null'];
 
@@ -224,77 +216,86 @@ export class RootStore {
     } order by name desc`;
     this.addLog(sql);
 
-    this.db.transaction(tx => {
-      tx.executeSql(
-        sql,
-        [],
-        (t, res) => {
-          const images = [];
-          try {
-            for (let index = 0; index < res.rows.length; index++) {
-              const image = res.rows.item(index);
-              image.uri = `${this.fileUriPrefix}${this.normalizedRootPath}${
-                this.albums.get(image.album).relativePath
-              }/${image.name}`;
-              images.push(image);
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          sql,
+          [],
+          (t, res) => {
+            const images = [];
+            try {
+              for (let index = 0; index < res.rows.length; index += BATCH_SIZE) {
+                const batch = [];
+                for (
+                  let j = index;
+                  j < Math.min(index + BATCH_SIZE, res.rows.length);
+                  j++
+                ) {
+                  const image = res.rows.item(j);
+                  const album = this.albums.get(image.album);
+                  if (album) {
+                    image.uri = `${this.fileUriPrefix}${this.normalizedRootPath}${album.relativePath}/${image.name}`;
+                    batch.push(image);
+                  }
+                }
+                images.push(...batch);
+              }
+            } catch (er) {
+              this.addLog(`Error when constructing image paths: ${er.message}`);
             }
-          } catch (er) {
-            this.addLog(`Error when constructing image paths: ${er.message}`);
-          }
-          this.addLog(`${res.rows.length} IMAGES`);
-          runInAction(() => {
-            this.images = images;
-            tx.commit();
-          });
-        },
-        er => {
-          this.addLog(`SELECT IMAGES ERR: ${er.message}`);
-          tx.rollback();
-          ToastAndroid.show(
-            'Проблема с получением данных. Посмотрите системные сообщения',
-            ToastAndroid.LONG,
-          );
-        },
-      );
+            this.addLog(`${images.length} IMAGES`);
+            runInAction(() => {
+              this.images = images;
+            });
+            resolve();
+          },
+          (_, er) => {
+            this.addLog(`SELECT IMAGES ERR: ${er.message}`);
+            reject(er);
+            ToastAndroid.show(
+              'Проблема с получением данных. Посмотрите системные сообщения',
+              ToastAndroid.LONG,
+            );
+          },
+        );
+      });
     });
   };
 
   addLog(text) {
     const d = new Date();
+    const timestamp = `${d.getFullYear()}.${d.getMonth()}.${d.getDate()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
     runInAction(() => {
-      this.log.push(
-        `${d.getFullYear()}.${d.getMonth()}.${d.getDate()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()} - ${text}`,
-      );
+      this.log.push(`${timestamp} - ${text}`);
+      if (this.log.length > 1000) {
+        this.log = this.log.slice(-1000);
+      }
     });
   }
 
-  getLog() {
-    return this.log.join('\r\n');
-  }
-
-  addAlbumToFilters(id) {
+  addAlbumToFilters = id => {
     runInAction(() => {
       this.activeFilters.albumIds.add(id);
     });
-  }
+  };
 
-  removeAlbumFromFilters(id) {
+  removeAlbumFromFilters = id => {
     runInAction(() => {
       this.activeFilters.albumIds.delete(id);
     });
-  }
+  };
 
-  addTagToFilters(id) {
+  addTagToFilters = id => {
     runInAction(() => {
       this.activeFilters.tagIds.add(id);
     });
-  }
+  };
 
-  removeTagFromFilters(id) {
+  removeTagFromFilters = id => {
     runInAction(() => {
       this.activeFilters.tagIds.delete(id);
     });
-  }
+  };
 
   resetFilters = () => {
     runInAction(() => {
@@ -315,35 +316,41 @@ export class RootStore {
           tx.executeSql(
             'DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?',
             [imageid, tagid],
-            (t, res) => {
-              tx.commit();
-              resolve();
-            },
+            () => resolve(),
             er => {
               this.addLog(`REMOVE TAGS FROM PHOTO ERR: ${er.message}`);
-              tx.rollback();
-              reject();
+              reject(er);
             },
           );
         });
+      } else {
+        resolve();
       }
     });
   };
 
   dropUserSelection = () => {
-    this.userSelectedImages.clear();
+    runInAction(() => {
+      this.userSelectedImages.clear();
+    });
   };
 
   addAllToUserSelection = () => {
-    this.userSelectedImages = new Set(this.images.map(image => image.id));
+    runInAction(() => {
+      this.userSelectedImages = new Set(this.images.map(image => image.id));
+    });
   };
 
   addToUserSelection = id => {
-    this.userSelectedImages.add(id);
+    runInAction(() => {
+      this.userSelectedImages.add(id);
+    });
   };
 
   removeFromUserSelection = id => {
-    this.userSelectedImages.delete(id);
+    runInAction(() => {
+      this.userSelectedImages.delete(id);
+    });
   };
 }
 
