@@ -45,6 +45,7 @@ export function Album({
         <View style={styles.innerContainer}>
           <Text style={styles.album}>{name}</Text>
           {isSelected && <Text style={styles.selected}>Selected</Text>}
+          }
         </View>
       </View>
     </TouchableOpacity>
