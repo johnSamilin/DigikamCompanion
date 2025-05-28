@@ -3,7 +3,7 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
   },
   row: {
     flexDirection: 'row',
@@ -12,8 +12,9 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     right: 20,
     bottom: 60,
-    borderRadius: 8,
+    borderRadius: 0,
     overflow: 'hidden',
+    transform: [{ rotate: '2deg' }],
   },
   titleWrapper: {
     flexDirection: 'row',
@@ -22,17 +23,19 @@ export const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 16,
     backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    borderBottomWidth: 3,
+    borderBottomColor: '#1a1a1a',
   },
   title: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: 'TT Tricks Trial Black',
     color: '#1a1a1a',
-    letterSpacing: 0.3,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   pictureSelected: {
     opacity: 0.25,
+    transform: [{ rotate: '2deg' }, { scale: 0.95 }],
   },
   emptyState: {
     flex: 1,
@@ -41,28 +44,35 @@ export const styles = StyleSheet.create({
     padding: 20,
   },
   emptyStateText: {
-    fontSize: 16,
-    color: '#666666',
+    fontSize: 18,
+    fontFamily: 'TT Tricks Trial Bold',
+    color: '#1a1a1a',
     textAlign: 'center',
     lineHeight: 24,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   button: {
     marginVertical: 6,
     minWidth: 120,
+    transform: [{ rotate: '-2deg' }],
   },
   buttonContainer: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#1a1a1a',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 0,
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: 'TT Tricks Trial Black',
     textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   actionButton: {
     marginBottom: 8,
+    transform: [{ rotate: '2deg' }],
   }
 });
