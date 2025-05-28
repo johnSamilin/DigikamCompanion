@@ -3,20 +3,23 @@ import {
   View,
   Button,
   ScrollView,
-  StyleSheet,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeScreen } from '@/components/template';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import { CommonActions } from '@react-navigation/native';
 import { Album } from '@/components/molecules';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import PagerView from 'react-native-pager-view';
 import { styles } from './styles';
 
 function Filter({ navigation }) {
   const store = useStore();
-  const [activeTab, setActiveTab] = useState('tags');
+  const [activeTab, setActiveTab] = useState(0);
+  const pagerRef = useRef(null);
+  const { width } = useWindowDimensions();
 
   const albums = useMemo(() => {
     const list = [];
@@ -30,94 +33,90 @@ function Filter({ navigation }) {
     return list;
   }, [store.tags]);
 
-  const search = () => {
+  const search = useCallback(() => {
     store.selectPhotos({
       albumIds: [...store.activeFilters.albumIds],
       tagIds: [...store.activeFilters.tagIds],
     });
     navigation.dispatch(CommonActions.goBack());
-  };
+  }, [store.activeFilters, navigation]);
 
-  const toggleAlbum = (newState, id) => {
-    if (newState === true) {
+  const toggleAlbum = useCallback((newState, id) => {
+    if (newState) {
       store.addAlbumToFilters(id);
     } else {
       store.removeAlbumFromFilters(id);
     }
-  };
+  }, [store]);
 
-  const toggleTag = (newState, id) => {
-    if (newState === true) {
+  const toggleTag = useCallback((newState, id) => {
+    if (newState) {
       store.addTagToFilters(id);
     } else {
       store.removeTagFromFilters(id);
     }
-  };
+  }, [store]);
+
+  const onTabPress = useCallback((index) => {
+    setActiveTab(index);
+    pagerRef.current?.setPage(index);
+  }, []);
+
+  const onPageSelected = useCallback((e) => {
+    setActiveTab(e.nativeEvent.position);
+  }, []);
 
   return (
     <SafeScreen>
       <View style={styles.container}>
         <View style={styles.tabs}>
           <Pressable
-            style={[
-              styles.tab,
-              activeTab === 'tags' && styles.activeTab,
-            ]}
-            onPress={() => setActiveTab('tags')}
+            style={[styles.tab, activeTab === 0 && styles.activeTab]}
+            onPress={() => onTabPress(0)}
           >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'tags' && styles.activeTabText,
-              ]}
-            >
+            <Text style={[styles.tabText, activeTab === 0 && styles.activeTabText]}>
               Tags
             </Text>
           </Pressable>
           <Pressable
-            style={[
-              styles.tab,
-              activeTab === 'albums' && styles.activeTab,
-            ]}
-            onPress={() => setActiveTab('albums')}
+            style={[styles.tab, activeTab === 1 && styles.activeTab]}
+            onPress={() => onTabPress(1)}
           >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'albums' && styles.activeTabText,
-              ]}
-            >
+            <Text style={[styles.tabText, activeTab === 1 && styles.activeTabText]}>
               Albums
             </Text>
           </Pressable>
         </View>
 
-        <ScrollView style={styles.content}>
-          {activeTab === 'tags' ? (
-            <View>
-              {tags.map(tag => (
-                <Album
-                  key={tag.id}
-                  id={tag.id}
-                  relativePath={tag.name}
-                  isSelected={store.activeFilters.tagIds.has(tag.id)}
-                  onChangeState={toggleTag}
-                />
-              ))}
-            </View>
-          ) : (
-            <View>
-              {albums.map(album => (
-                <Album
-                  key={album.id}
-                  {...album}
-                  isSelected={store.activeFilters.albumIds.has(album.id)}
-                  onChangeState={toggleAlbum}
-                />
-              ))}
-            </View>
-          )}
-        </ScrollView>
+        <PagerView
+          ref={pagerRef}
+          style={styles.pagerView}
+          initialPage={0}
+          onPageSelected={onPageSelected}
+        >
+          <ScrollView key="1" style={{ width }}>
+            {tags.map(tag => (
+              <Album
+                key={tag.id}
+                id={tag.id}
+                relativePath={tag.name}
+                isSelected={store.activeFilters.tagIds.has(tag.id)}
+                onChangeState={toggleTag}
+              />
+            ))}
+          </ScrollView>
+
+          <ScrollView key="2" style={{ width }}>
+            {albums.map(album => (
+              <Album
+                key={album.id}
+                {...album}
+                isSelected={store.activeFilters.albumIds.has(album.id)}
+                onChangeState={toggleAlbum}
+              />
+            ))}
+          </ScrollView>
+        </PagerView>
 
         <View style={styles.buttonsWrapper}>
           <View style={styles.button}>

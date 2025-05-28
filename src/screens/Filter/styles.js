@@ -28,7 +28,7 @@ export const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '600',
   },
-  content: {
+  pagerView: {
     flex: 1,
   },
   buttonsWrapper: {
