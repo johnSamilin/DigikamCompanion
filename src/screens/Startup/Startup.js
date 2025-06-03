@@ -40,6 +40,12 @@ const styles = {
   drawer: {
     padding: 20,
   },
+  settingsButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 120,
+    zIndex: 1,
+  },
 };
 
 function Startup({ navigation }) {
@@ -60,6 +66,15 @@ function Startup({ navigation }) {
       </TouchableOpacity>
     );
   };
+
+  const openSettings = () => {
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'Settings',
+      }),
+    );
+  };
+
   const store = useStore();
   const [isAllowedToManage, setIsAllowed] = useState(0);
   useEffect(() => {
@@ -89,7 +104,16 @@ function Startup({ navigation }) {
                 <FolderPicker />
               </View>
             ) : (
-              <Gallery navigation={navigation} />
+              <>
+                <Gallery navigation={navigation} />
+                <View style={styles.settingsButton}>
+                  <Button 
+                    title="Settings"
+                    onPress={openSettings}
+                    color="#1a1a1a"
+                  />
+                </View>
+              </>
             ))}
           {isAllowedToManage === 2 && (
             <View style={styles.centerWrapper}>
@@ -110,4 +134,5 @@ function Startup({ navigation }) {
     </SafeScreen>
   );
 }
+
 export default observer(Startup);
