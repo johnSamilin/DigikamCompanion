@@ -100,7 +100,7 @@ export class RootStore {
   };
 
   copyDBToCache = () => {
-    const originalDbPath = `${this.normalizedRootPath}/${dbName}.db`;
+    const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
     return copyFile(originalDbPath, localDbPath).then(() => {
       this.addLog(`DB File copied to ${localDbPath}`);
     });
@@ -281,7 +281,7 @@ export class RootStore {
                   const image = res.rows.item(j);
                   const album = this.albums.get(image.album);
                   if (album) {
-                    image.uri = `${this.fileUriPrefix}${this.normalizedRootPath}${album.relativePath}/${image.name}`;
+                    image.uri = `${this.fileUriPrefix}/storage/emulated/0/${this.normalizedRootPath}${album.relativePath}/${image.name}`;
                     batch.push(image);
                   }
                 }
