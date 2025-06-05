@@ -20,6 +20,10 @@ function Settings() {
     store.setWallpaperFrequency(days);
   };
 
+  const setWallpaperType = (type) => {
+    store.setWallpaperType(type);
+  };
+
   return (
     <SafeScreen>
       <View style={styles.container}>
@@ -57,6 +61,27 @@ function Settings() {
               title="3 Days" 
               onPress={() => updateFrequency(3)}
               color={store.wallpaperFrequency === 3 ? '#00ff00' : '#1a1a1a'}
+            />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Wallpaper Type</Text>
+          <View style={styles.buttons}>
+            <Button 
+              title="Both" 
+              onPress={() => setWallpaperType('both')}
+              color={store.wallpaperType === 'both' ? '#00ff00' : '#1a1a1a'}
+            />
+            <Button 
+              title="Home" 
+              onPress={() => setWallpaperType('home')}
+              color={store.wallpaperType === 'home' ? '#00ff00' : '#1a1a1a'}
+            />
+            <Button 
+              title="Lock" 
+              onPress={() => setWallpaperType('lock')}
+              color={store.wallpaperType === 'lock' ? '#00ff00' : '#1a1a1a'}
             />
           </View>
         </View>

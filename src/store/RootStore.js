@@ -34,6 +34,7 @@ export class RootStore {
   wallpaperTags = new Set();
   wallpaperFrequency = 1;
   wallpaperTimer = null;
+  wallpaperType = 'both'; // 'home', 'lock', or 'both'
 
   get isFilterApplied() {
     return (
@@ -60,6 +61,7 @@ export class RootStore {
     this.rootFolder = mmkv.getString('rootfolder');
     this.wallpaperTags = new Set(JSON.parse(mmkv.getString('wallpaperTags') || '[]'));
     this.wallpaperFrequency = parseInt(mmkv.getString('wallpaperFrequency') || '1', 10);
+    this.wallpaperType = mmkv.getString('wallpaperType') || 'both';
     
     if (this.rootFolder) {
       this.getDBConnection();
@@ -475,6 +477,13 @@ export class RootStore {
     this.startWallpaperService();
   };
 
+  setWallpaperType = type => {
+    runInAction(() => {
+      this.wallpaperType = type;
+      mmkv.set('wallpaperType', type);
+    });
+  };
+
   startWallpaperService = () => {
     if (this.wallpaperTimer) {
       clearInterval(this.wallpaperTimer);
@@ -511,7 +520,7 @@ export class RootStore {
       const randomIndex = Math.floor(Math.random() * this.images.length);
       const photo = this.images[randomIndex];
 
-      await NativeModules.WallpaperModule.setWallpaper(photo.uri, 'both');
+      await NativeModules.WallpaperModule.setWallpaper(photo.uri, this.wallpaperType);
       ToastAndroid.show('Wallpaper updated successfully', ToastAndroid.SHORT);
     } catch (error) {
       ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
