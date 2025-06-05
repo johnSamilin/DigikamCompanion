@@ -1,6 +1,6 @@
 {
   "name": "digikamcompanion",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": false,
   "scripts": {
     "android": "react-native run-android",

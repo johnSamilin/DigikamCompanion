@@ -6,6 +6,7 @@ import {
 } from 'react-native-fs';
 import { MMKV } from 'react-native-mmkv';
 import SQLite from 'react-native-sqlite-storage';
+import WallPaperManager from 'react-native-wallpaper-manager';
 
 const mmkv = new MMKV();
 const dbName = 'digikam4';
@@ -31,6 +32,9 @@ export class RootStore {
   };
   orientaion = 'P';
   fileUriPrefix = `file://`;
+  wallpaperTags = new Set();
+  wallpaperFrequency = 1;
+  wallpaperTimer = null;
 
   get isFilterApplied() {
     return (
@@ -55,6 +59,9 @@ export class RootStore {
   constructor() {
     makeAutoObservable(this);
     this.rootFolder = mmkv.getString('rootfolder');
+    this.wallpaperTags = new Set(JSON.parse(mmkv.getString('wallpaperTags') || '[]'));
+    this.wallpaperFrequency = parseInt(mmkv.getString('wallpaperFrequency') || '1', 10);
+    
     if (this.rootFolder) {
       this.getDBConnection();
     }
@@ -64,6 +71,10 @@ export class RootStore {
         this.orientaion = width < height ? 'P' : 'L';
       });
     });
+
+    if (this.wallpaperTags.size > 0) {
+      this.startWallpaperService();
+    }
   }
 
   getDBConnection = async () => {
@@ -436,6 +447,77 @@ export class RootStore {
     runInAction(() => {
       this.userSelectedImages.delete(id);
     });
+  };
+
+  // Wallpaper settings
+  addWallpaperTag = id => {
+    runInAction(() => {
+      this.wallpaperTags.add(id);
+      mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
+    });
+    this.startWallpaperService();
+  };
+
+  removeWallpaperTag = id => {
+    runInAction(() => {
+      this.wallpaperTags.delete(id);
+      mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
+    });
+    if (this.wallpaperTags.size === 0) {
+      this.stopWallpaperService();
+    }
+  };
+
+  setWallpaperFrequency = days => {
+    runInAction(() => {
+      this.wallpaperFrequency = days;
+      mmkv.set('wallpaperFrequency', days.toString());
+    });
+    this.startWallpaperService();
+  };
+
+  startWallpaperService = () => {
+    if (this.wallpaperTimer) {
+      clearInterval(this.wallpaperTimer);
+    }
+
+    this.updateWallpaper();
+    this.wallpaperTimer = setInterval(
+      this.updateWallpaper,
+      this.wallpaperFrequency * 24 * 60 * 60 * 1000
+    );
+  };
+
+  stopWallpaperService = () => {
+    if (this.wallpaperTimer) {
+      clearInterval(this.wallpaperTimer);
+      this.wallpaperTimer = null;
+    }
+  };
+
+  updateWallpaper = async () => {
+    try {
+      if (this.wallpaperTags.size === 0) return;
+
+      const photos = await this.selectPhotos({
+        albumIds: [],
+        tagIds: [...this.wallpaperTags],
+      });
+
+      if (this.images.length === 0) {
+        ToastAndroid.show('No photos found with selected tags', ToastAndroid.SHORT);
+        return;
+      }
+
+      const randomIndex = Math.floor(Math.random() * this.images.length);
+      const photo = this.images[randomIndex];
+
+      await WallPaperManager.setWallpaper(photo.uri, 'both');
+      ToastAndroid.show('Wallpaper updated successfully', ToastAndroid.SHORT);
+    } catch (error) {
+      ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
+      this.addLog(`Wallpaper update error: ${error.message}`);
+    }
   };
 }
 
