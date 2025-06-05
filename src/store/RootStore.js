@@ -1,12 +1,11 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { Dimensions, ToastAndroid } from 'react-native';
+import { Dimensions, NativeModules, ToastAndroid } from 'react-native';
 import {
   copyFile,
   DocumentDirectoryPath,
 } from 'react-native-fs';
 import { MMKV } from 'react-native-mmkv';
 import SQLite from 'react-native-sqlite-storage';
-import WallPaperManager from 'react-native-wallpaper-manager';
 
 const mmkv = new MMKV();
 const dbName = 'digikam4';
@@ -499,7 +498,7 @@ export class RootStore {
     try {
       if (this.wallpaperTags.size === 0) return;
 
-      const photos = await this.selectPhotos({
+      await this.selectPhotos({
         albumIds: [],
         tagIds: [...this.wallpaperTags],
       });
@@ -512,7 +511,7 @@ export class RootStore {
       const randomIndex = Math.floor(Math.random() * this.images.length);
       const photo = this.images[randomIndex];
 
-      await WallPaperManager.setWallpaper(photo.uri, 'both');
+      await NativeModules.WallpaperModule.setWallpaper(photo.uri, 'both');
       ToastAndroid.show('Wallpaper updated successfully', ToastAndroid.SHORT);
     } catch (error) {
       ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);

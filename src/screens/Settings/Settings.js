@@ -2,7 +2,7 @@ import { observer } from 'mobx-react-lite';
 import { SafeScreen } from '@/components/template';
 import { ScrollView, Text, View } from 'react-native';
 import { useStore } from '@/store';
-import { Button, TagTree } from '@/components/molecules';
+import { Button, FolderPicker, TagTree } from '@/components/molecules';
 import { styles } from './styles';
 
 function Settings() {
@@ -16,38 +16,56 @@ function Settings() {
     }
   };
 
-  const updateFrequency = (minutes) => {
-    store.setWallpaperFrequency(minutes);
+  const updateFrequency = (days) => {
+    store.setWallpaperFrequency(days);
   };
 
   return (
     <SafeScreen>
       <View style={styles.container}>
-        <Text style={styles.title}>Wallpaper Settings</Text>
+        <Text style={styles.title}>Settings</Text>
         
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Update Frequency</Text>
+          <Text style={styles.sectionTitle}>Root Folder</Text>
+          <Text style={styles.description}>
+            Specify the root folder where photos (and Digikam database) are located
+          </Text>
+          {store.rootFolder && (
+            <Text style={styles.currentPath}>
+              Current: {store.normalizedRootPath}
+            </Text>
+          )}
+          <View style={styles.folderPicker}>
+            <FolderPicker />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Wallpaper Update Frequency</Text>
           <View style={styles.buttons}>
             <Button 
-              title="15 min" 
-              onPress={() => updateFrequency(15)}
-              color={store.wallpaperFrequency === 15 ? '#00ff00' : '#1a1a1a'}
+              title="1 Day" 
+              onPress={() => updateFrequency(1)}
+              color={store.wallpaperFrequency === 1 ? '#00ff00' : '#1a1a1a'}
             />
             <Button 
-              title="30 min" 
-              onPress={() => updateFrequency(30)}
-              color={store.wallpaperFrequency === 30 ? '#00ff00' : '#1a1a1a'}
+              title="2 Days" 
+              onPress={() => updateFrequency(2)}
+              color={store.wallpaperFrequency === 2 ? '#00ff00' : '#1a1a1a'}
             />
             <Button 
-              title="1 hour" 
-              onPress={() => updateFrequency(60)}
-              color={store.wallpaperFrequency === 60 ? '#00ff00' : '#1a1a1a'}
+              title="3 Days" 
+              onPress={() => updateFrequency(3)}
+              color={store.wallpaperFrequency === 3 ? '#00ff00' : '#1a1a1a'}
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Tags</Text>
+          <Text style={styles.sectionTitle}>Wallpaper Tags</Text>
+          <Text style={styles.description}>
+            Select tags to use for wallpaper rotation
+          </Text>
           <ScrollView style={styles.tagList}>
             {Array.from(store.tagTree.values()).map(tag => (
               <TagTree
@@ -68,7 +86,7 @@ function Settings() {
             textColor="#000000"
           />
           <Button 
-            title="Stop" 
+            title="Stop Service" 
             onPress={store.stopWallpaperService}
             color="#ff0000"
           />
