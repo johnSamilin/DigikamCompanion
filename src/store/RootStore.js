@@ -16,7 +16,7 @@ const BATCH_SIZE = 50;
 export class RootStore {
   rootFolder = null;
   isReady = false;
-  db;
+  db = null;
   albums = new Map();
   tags = new Map();
   tagTree = new Map();
@@ -57,6 +57,10 @@ export class RootStore {
     return path.replace(/\/+$/, '');
   }
 
+  get isDatabaseReady() {
+    return this.db !== null && this.isReady;
+  }
+
   constructor() {
     makeAutoObservable(this);
     this.rootFolder = mmkv.getString('rootfolder');
@@ -66,7 +70,14 @@ export class RootStore {
     this.lastWallpaperUpdate = mmkv.getString('lastWallpaperUpdate');
     
     if (this.rootFolder) {
-      this.getDBConnection();
+      this.getDBConnection().then(() => {
+        // Only start wallpaper service after database is ready
+        if (this.wallpaperTags.size > 0) {
+          this.checkAndStartWallpaperService();
+        }
+      }).catch(error => {
+        this.addLog(`Failed to initialize database: ${error.message}`);
+      });
     }
     
     Dimensions.addEventListener('change', ({ window: { width, height } }) => {
@@ -74,11 +85,6 @@ export class RootStore {
         this.orientaion = width < height ? 'P' : 'L';
       });
     });
-
-    // Check if wallpaper service should be running
-    if (this.wallpaperTags.size > 0) {
-      this.checkAndStartWallpaperService();
-    }
   }
 
   getDBConnection = async () => {
@@ -96,21 +102,28 @@ export class RootStore {
           },
           database => {
             runInAction(() => {
-              this.isReady = true;
               this.db = database;
+              this.isReady = true;
             });
             Promise.all([
               this.readAlbums(),
               this.readTags(),
               this.readTagsTree(),
               this.readImageTags(),
-            ]).then(resolve);
+            ]).then(() => {
+              this.addLog('Database initialized successfully');
+              resolve();
+            }).catch(reject);
           },
-          reject,
+          error => {
+            this.addLog(`Database connection failed: ${error.message}`);
+            reject(error);
+          },
         );
       });
     } catch (er) {
-      this.addLog(`\r\n${er.message}`);
+      this.addLog(`Database setup error: ${er.message}`);
+      throw er;
     }
   };
 
@@ -124,11 +137,23 @@ export class RootStore {
   setRootFolder = value => {
     this.rootFolder = value;
     mmkv.set('rootfolder', value);
-    this.getDBConnection();
+    this.getDBConnection().then(() => {
+      // Start wallpaper service after database is ready
+      if (this.wallpaperTags.size > 0) {
+        this.checkAndStartWallpaperService();
+      }
+    }).catch(error => {
+      this.addLog(`Failed to initialize database after folder selection: ${error.message}`);
+    });
   };
 
   readAlbums = () => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       this.db.transaction(tx => {
         tx.executeSql(
           'SELECT id, albumRoot, relativePath from Albums order by relativePath DESC',
@@ -156,6 +181,11 @@ export class RootStore {
 
   readTags = () => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       this.db.transaction(tx => {
         tx.executeSql(
           'SELECT id, name from Tags where id > 25',
@@ -183,6 +213,11 @@ export class RootStore {
 
   readTagsTree = () => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       this.db.transaction(tx => {
         tx.executeSql(
           'SELECT id, pid from TagsTree',
@@ -228,6 +263,11 @@ export class RootStore {
 
   readImageTags = () => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       this.db.transaction(tx => {
         tx.executeSql(
           'SELECT imageid, tagid from ImageTags',
@@ -259,6 +299,11 @@ export class RootStore {
   };
 
   selectPhotos = async (activeFilters = { albumIds: [], tagIds: [] }) => {
+    if (!this.isDatabaseReady) {
+      this.addLog('Cannot select photos: Database not ready');
+      return Promise.reject(new Error('Database not ready'));
+    }
+
     this.dropUserSelection();
     const constraints = ['album is not null'];
 
@@ -315,7 +360,7 @@ export class RootStore {
             this.addLog(`SELECT IMAGES ERR: ${er.message}`);
             reject(er);
             ToastAndroid.show(
-              'Проблема с получением данных. Посмотрите системные сообщения',
+              'Problem getting data. Check system messages',
               ToastAndroid.LONG,
             );
           },
@@ -407,6 +452,11 @@ export class RootStore {
   // Tag management methods
   createTag = (name, parentId = null) => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       this.db.transaction(tx => {
         // First, get the next available tag ID
         tx.executeSql(
@@ -467,6 +517,11 @@ export class RootStore {
 
   addTagToPhoto = (tagId, imageId) => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       // Check if tag is already assigned
       const existingTags = this.imagetags.get(imageId) || [];
       if (existingTags.some(t => t.tagid === tagId)) {
@@ -501,6 +556,11 @@ export class RootStore {
 
   removeTagFromPhoto = (tagid, imageid) => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       let imagetags = this.imagetags.get(imageid);
       if (imagetags) {
         imagetags = imagetags.filter(tag => tag.tagid !== tagid);
@@ -526,6 +586,11 @@ export class RootStore {
 
   deleteTag = (tagId) => {
     return new Promise((resolve, reject) => {
+      if (!this.isDatabaseReady) {
+        reject(new Error('Database not ready'));
+        return;
+      }
+
       this.db.transaction(tx => {
         // First remove all image associations
         tx.executeSql(
@@ -623,7 +688,9 @@ export class RootStore {
       this.wallpaperTags.add(id);
       mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
     });
-    this.checkAndStartWallpaperService();
+    if (this.isDatabaseReady) {
+      this.checkAndStartWallpaperService();
+    }
   };
 
   removeWallpaperTag = id => {
@@ -633,7 +700,7 @@ export class RootStore {
     });
     if (this.wallpaperTags.size === 0) {
       this.stopWallpaperService();
-    } else {
+    } else if (this.isDatabaseReady) {
       this.checkAndStartWallpaperService();
     }
   };
@@ -643,7 +710,9 @@ export class RootStore {
       this.wallpaperFrequency = days;
       mmkv.set('wallpaperFrequency', days.toString());
     });
-    this.checkAndStartWallpaperService();
+    if (this.isDatabaseReady) {
+      this.checkAndStartWallpaperService();
+    }
   };
 
   setWallpaperType = type => {
@@ -654,7 +723,15 @@ export class RootStore {
   };
 
   checkAndStartWallpaperService = () => {
-    if (this.wallpaperTags.size === 0) return;
+    if (!this.isDatabaseReady) {
+      this.addLog('Cannot start wallpaper service: Database not ready');
+      return;
+    }
+
+    if (this.wallpaperTags.size === 0) {
+      this.addLog('Cannot start wallpaper service: No wallpaper tags selected');
+      return;
+    }
 
     // Check if enough time has passed since last update
     const now = new Date().getTime();
@@ -676,7 +753,10 @@ export class RootStore {
       clearInterval(this.wallpaperTimer);
     }
 
-    if (this.wallpaperTags.size === 0) return;
+    if (!this.isDatabaseReady || this.wallpaperTags.size === 0) {
+      this.addLog('Cannot start wallpaper service: Database not ready or no tags selected');
+      return;
+    }
 
     // Calculate next update time
     const now = new Date().getTime();
@@ -708,8 +788,13 @@ export class RootStore {
 
   updateWallpaper = async () => {
     try {
+      if (!this.isDatabaseReady) {
+        this.addLog('Cannot update wallpaper: Database not ready');
+        return;
+      }
+
       if (this.wallpaperTags.size === 0) {
-        this.addLog('No wallpaper tags selected');
+        this.addLog('Cannot update wallpaper: No wallpaper tags selected');
         return;
       }
 
