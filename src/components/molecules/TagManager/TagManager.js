@@ -55,6 +55,20 @@ export const TagManager = observer(({ imageId, visible, onClose }) => {
     setIsLoading(false);
   };
 
+  const handleClose = async () => {
+    // Sync database when closing tag manager
+    if (store.hasUnsavedChanges) {
+      setIsLoading(true);
+      try {
+        await store.syncDatabaseToOriginal();
+      } catch (error) {
+        Alert.alert('Warning', 'Failed to save changes to database. Changes may be lost.');
+      }
+      setIsLoading(false);
+    }
+    onClose();
+  };
+
   const renderTagTree = (tag, level = 0) => {
     const isAssigned = imageTagIds.has(tag.id);
     
@@ -87,11 +101,22 @@ export const TagManager = observer(({ imageId, visible, onClose }) => {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose}>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Manage Tags</Text>
-          <Button title="Close" onPress={onClose} />
+          <View style={styles.headerButtons}>
+            {store.hasUnsavedChanges && (
+              <Button 
+                title="Save" 
+                onPress={store.forceSyncDatabase}
+                color="#00ff00"
+                textColor="#000000"
+                style={styles.saveButton}
+              />
+            )}
+            <Button title="Close" onPress={handleClose} />
+          </View>
         </View>
 
         <View style={styles.currentTags}>

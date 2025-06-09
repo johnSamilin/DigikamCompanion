@@ -51,6 +51,26 @@ function Settings() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Database</Text>
+          <Text style={styles.description}>
+            Manage database synchronization with Digikam
+          </Text>
+          <View style={styles.buttons}>
+            <Button 
+              title="Sync Database" 
+              onPress={store.forceSyncDatabase}
+              color={store.hasUnsavedChanges ? '#ff0000' : '#1a1a1a'}
+              textColor="#ffffff"
+            />
+          </View>
+          {store.hasUnsavedChanges && (
+            <Text style={styles.warningText}>
+              You have unsaved changes that will be synced back to Digikam database
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Wallpaper Update Frequency</Text>
           <Text style={styles.description}>
             Last update: {formatLastUpdate()}

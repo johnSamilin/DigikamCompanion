@@ -61,4 +61,11 @@ export const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 32,
   },
+  warningText: {
+    fontSize: 12,
+    fontFamily: 'TT Tricks Trial Regular',
+    color: '#ff0000',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
 });

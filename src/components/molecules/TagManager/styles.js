@@ -22,6 +22,13 @@ export const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  saveButton: {
+    minWidth: 80,
+  },
   currentTags: {
     marginBottom: 20,
   },

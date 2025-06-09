@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { Dimensions, NativeModules, ToastAndroid } from 'react-native';
+import { Dimensions, NativeModules, ToastAndroid, AppState } from 'react-native';
 import {
   copyFile,
   DocumentDirectoryPath,
@@ -36,6 +36,7 @@ export class RootStore {
   wallpaperTimer = null;
   wallpaperType = 'both'; // 'home', 'lock', or 'both'
   lastWallpaperUpdate = null;
+  hasUnsavedChanges = false;
 
   get isFilterApplied() {
     return (
@@ -85,7 +86,16 @@ export class RootStore {
         this.orientaion = width < height ? 'P' : 'L';
       });
     });
+
+    // Listen for app state changes to sync database when app goes to background
+    AppState.addEventListener('change', this.handleAppStateChange);
   }
+
+  handleAppStateChange = (nextAppState) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      this.syncDatabaseToOriginal();
+    }
+  };
 
   getDBConnection = async () => {
     try {
@@ -131,6 +141,55 @@ export class RootStore {
     const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
     return copyFile(originalDbPath, localDbPath).then(() => {
       this.addLog(`DB File copied to ${localDbPath}`);
+    });
+  };
+
+  syncDatabaseToOriginal = async () => {
+    if (!this.hasUnsavedChanges || !this.isDatabaseReady || !this.normalizedRootPath) {
+      return;
+    }
+
+    try {
+      const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
+      
+      // Close the database connection temporarily
+      if (this.db) {
+        await new Promise((resolve, reject) => {
+          this.db.close(resolve, reject);
+        });
+      }
+
+      // Copy the modified database back to the original location
+      await copyFile(localDbPath, originalDbPath);
+      
+      // Reopen the database
+      await new Promise((resolve, reject) => {
+        SQLite.openDatabase(
+          {
+            name: dbName,
+            createFromLocation: originalDbName,
+          },
+          database => {
+            runInAction(() => {
+              this.db = database;
+              this.hasUnsavedChanges = false;
+            });
+            this.addLog('Database synced back to original location');
+            resolve();
+          },
+          reject,
+        );
+      });
+
+    } catch (error) {
+      this.addLog(`Failed to sync database: ${error.message}`);
+      ToastAndroid.show('Failed to save changes to database', ToastAndroid.LONG);
+    }
+  };
+
+  markDatabaseChanged = () => {
+    runInAction(() => {
+      this.hasUnsavedChanges = true;
     });
   };
 
@@ -491,6 +550,7 @@ export class RootStore {
                       }
                     });
                     
+                    this.markDatabaseChanged();
                     this.addLog(`Created tag: ${name} (ID: ${nextId})`);
                     resolve(newTag);
                   },
@@ -541,6 +601,7 @@ export class RootStore {
               runInAction(() => {
                 this.imagetags.set(imageId, updatedTags);
               });
+              this.markDatabaseChanged();
               this.addLog(`Added tag ${tag.name} to image ${imageId}`);
             }
             resolve();
@@ -571,7 +632,10 @@ export class RootStore {
           tx.executeSql(
             'DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?',
             [imageid, tagid],
-            () => resolve(),
+            () => {
+              this.markDatabaseChanged();
+              resolve();
+            },
             er => {
               this.addLog(`REMOVE TAGS FROM PHOTO ERR: ${er.message}`);
               reject(er);
@@ -633,6 +697,7 @@ export class RootStore {
                         this.wallpaperTags.delete(tagId);
                       });
                       
+                      this.markDatabaseChanged();
                       this.addLog(`Deleted tag: ${tag.name}`);
                     }
                     resolve();
@@ -843,6 +908,28 @@ export class RootStore {
       const message = `Wallpaper update error: ${error.message}`;
       ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
       this.addLog(message);
+    }
+  };
+
+  // Manual sync method that can be called from UI
+  forceSyncDatabase = async () => {
+    await this.syncDatabaseToOriginal();
+    ToastAndroid.show('Database synced successfully', ToastAndroid.SHORT);
+  };
+
+  // Cleanup method to be called when app is closing
+  cleanup = async () => {
+    this.stopWallpaperService();
+    await this.syncDatabaseToOriginal();
+    
+    // Remove app state listener
+    AppState.removeEventListener('change', this.handleAppStateChange);
+    
+    // Close database connection
+    if (this.db) {
+      await new Promise((resolve, reject) => {
+        this.db.close(resolve, reject);
+      });
     }
   };
 }
