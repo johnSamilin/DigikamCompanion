@@ -35,6 +35,7 @@ export class RootStore {
   wallpaperFrequency = 1;
   wallpaperTimer = null;
   wallpaperType = 'both'; // 'home', 'lock', or 'both'
+  lastWallpaperUpdate = null;
 
   get isFilterApplied() {
     return (
@@ -62,6 +63,7 @@ export class RootStore {
     this.wallpaperTags = new Set(JSON.parse(mmkv.getString('wallpaperTags') || '[]'));
     this.wallpaperFrequency = parseInt(mmkv.getString('wallpaperFrequency') || '1', 10);
     this.wallpaperType = mmkv.getString('wallpaperType') || 'both';
+    this.lastWallpaperUpdate = mmkv.getString('lastWallpaperUpdate');
     
     if (this.rootFolder) {
       this.getDBConnection();
@@ -73,8 +75,9 @@ export class RootStore {
       });
     });
 
+    // Check if wallpaper service should be running
     if (this.wallpaperTags.size > 0) {
-      this.startWallpaperService();
+      this.checkAndStartWallpaperService();
     }
   }
 
@@ -456,7 +459,7 @@ export class RootStore {
       this.wallpaperTags.add(id);
       mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
     });
-    this.startWallpaperService();
+    this.checkAndStartWallpaperService();
   };
 
   removeWallpaperTag = id => {
@@ -466,6 +469,8 @@ export class RootStore {
     });
     if (this.wallpaperTags.size === 0) {
       this.stopWallpaperService();
+    } else {
+      this.checkAndStartWallpaperService();
     }
   };
 
@@ -474,7 +479,7 @@ export class RootStore {
       this.wallpaperFrequency = days;
       mmkv.set('wallpaperFrequency', days.toString());
     });
-    this.startWallpaperService();
+    this.checkAndStartWallpaperService();
   };
 
   setWallpaperType = type => {
@@ -484,28 +489,67 @@ export class RootStore {
     });
   };
 
+  checkAndStartWallpaperService = () => {
+    if (this.wallpaperTags.size === 0) return;
+
+    // Check if enough time has passed since last update
+    const now = new Date().getTime();
+    const lastUpdate = this.lastWallpaperUpdate ? new Date(this.lastWallpaperUpdate).getTime() : 0;
+    const timeDiff = now - lastUpdate;
+    const requiredInterval = this.wallpaperFrequency * 24 * 60 * 60 * 1000; // Convert days to milliseconds
+
+    if (timeDiff >= requiredInterval || !this.lastWallpaperUpdate) {
+      // Update immediately if enough time has passed
+      this.updateWallpaper();
+    }
+
+    // Start the timer for future updates
+    this.startWallpaperService();
+  };
+
   startWallpaperService = () => {
     if (this.wallpaperTimer) {
       clearInterval(this.wallpaperTimer);
     }
 
-    this.updateWallpaper();
-    this.wallpaperTimer = setInterval(
-      this.updateWallpaper,
-      this.wallpaperFrequency * 24 * 60 * 60 * 1000
-    );
+    if (this.wallpaperTags.size === 0) return;
+
+    // Calculate next update time
+    const now = new Date().getTime();
+    const lastUpdate = this.lastWallpaperUpdate ? new Date(this.lastWallpaperUpdate).getTime() : now;
+    const nextUpdate = lastUpdate + (this.wallpaperFrequency * 24 * 60 * 60 * 1000);
+    const timeUntilNext = Math.max(0, nextUpdate - now);
+
+    // Set timeout for next update
+    this.wallpaperTimer = setTimeout(() => {
+      this.updateWallpaper();
+      // After first update, set regular interval
+      this.wallpaperTimer = setInterval(
+        this.updateWallpaper,
+        this.wallpaperFrequency * 24 * 60 * 60 * 1000
+      );
+    }, timeUntilNext);
+
+    this.addLog(`Wallpaper service started. Next update in ${Math.round(timeUntilNext / (1000 * 60 * 60))} hours`);
   };
 
   stopWallpaperService = () => {
     if (this.wallpaperTimer) {
+      clearTimeout(this.wallpaperTimer);
       clearInterval(this.wallpaperTimer);
       this.wallpaperTimer = null;
     }
+    this.addLog('Wallpaper service stopped');
   };
 
   updateWallpaper = async () => {
     try {
-      if (this.wallpaperTags.size === 0) return;
+      if (this.wallpaperTags.size === 0) {
+        this.addLog('No wallpaper tags selected');
+        return;
+      }
+
+      this.addLog('Starting wallpaper update...');
 
       await this.selectPhotos({
         albumIds: [],
@@ -513,20 +557,43 @@ export class RootStore {
       });
 
       if (this.images.length === 0) {
-        ToastAndroid.show('No photos found with selected tags', ToastAndroid.SHORT);
+        const message = 'No photos found with selected wallpaper tags';
+        ToastAndroid.show(message, ToastAndroid.SHORT);
+        this.addLog(message);
         return;
       }
 
       const randomIndex = Math.floor(Math.random() * this.images.length);
       const photo = this.images[randomIndex];
 
-      await NativeModules.WallpaperModule.setWallpaper(photo.uri, this.wallpaperType);
-      ToastAndroid.show('Wallpaper updated successfully', ToastAndroid.SHORT);
+      this.addLog(`Setting wallpaper: ${photo.name} (type: ${this.wallpaperType})`);
+
+      // Use a timeout to prevent blocking the UI
+      setTimeout(async () => {
+        try {
+          await NativeModules.WallpaperModule.setWallpaper(photo.uri, this.wallpaperType);
+          
+          // Update last wallpaper update time
+          const now = new Date().toISOString();
+          runInAction(() => {
+            this.lastWallpaperUpdate = now;
+          });
+          mmkv.set('lastWallpaperUpdate', now);
+
+          const message = 'Wallpaper updated successfully';
+          ToastAndroid.show(message, ToastAndroid.SHORT);
+          this.addLog(`${message}: ${photo.name}`);
+        } catch (error) {
+          const message = `Failed to update wallpaper: ${error.message}`;
+          ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
+          this.addLog(message);
+        }
+      }, 100);
+
     } catch (error) {
+      const message = `Wallpaper update error: ${error.message}`;
       ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
-      this.addLog(`Wallpaper update error: ${error.message}`);
+      this.addLog(message);
     }
   };
 }
-
-export const rootStore = new RootStore();
