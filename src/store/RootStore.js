@@ -404,6 +404,101 @@ export class RootStore {
     });
   };
 
+  // Tag management methods
+  createTag = (name, parentId = null) => {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        // First, get the next available tag ID
+        tx.executeSql(
+          'SELECT MAX(id) as maxId FROM Tags',
+          [],
+          (_, res) => {
+            const nextId = (res.rows.item(0).maxId || 25) + 1;
+            
+            // Insert the new tag
+            tx.executeSql(
+              'INSERT INTO Tags (id, name) VALUES (?, ?)',
+              [nextId, name],
+              (_, tagRes) => {
+                // Add to TagsTree
+                const pid = parentId || 0;
+                tx.executeSql(
+                  'INSERT INTO TagsTree (id, pid) VALUES (?, ?)',
+                  [nextId, pid],
+                  (_, treeRes) => {
+                    // Update local state
+                    const newTag = { id: nextId, name, children: [] };
+                    runInAction(() => {
+                      this.tags.set(nextId, newTag);
+                      
+                      if (parentId && this.tags.has(parentId)) {
+                        // Add to parent's children
+                        const parent = this.tags.get(parentId);
+                        parent.children.push(newTag);
+                      } else {
+                        // Add to root level
+                        this.tagTree.set(nextId, newTag);
+                      }
+                    });
+                    
+                    this.addLog(`Created tag: ${name} (ID: ${nextId})`);
+                    resolve(newTag);
+                  },
+                  (_, er) => {
+                    this.addLog(`CREATE TAG TREE ERR: ${er.message}`);
+                    reject(er);
+                  }
+                );
+              },
+              (_, er) => {
+                this.addLog(`CREATE TAG ERR: ${er.message}`);
+                reject(er);
+              }
+            );
+          },
+          (_, er) => {
+            this.addLog(`GET MAX TAG ID ERR: ${er.message}`);
+            reject(er);
+          }
+        );
+      });
+    });
+  };
+
+  addTagToPhoto = (tagId, imageId) => {
+    return new Promise((resolve, reject) => {
+      // Check if tag is already assigned
+      const existingTags = this.imagetags.get(imageId) || [];
+      if (existingTags.some(t => t.tagid === tagId)) {
+        resolve(); // Already assigned
+        return;
+      }
+
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'INSERT INTO ImageTags (imageid, tagid) VALUES (?, ?)',
+          [imageId, tagId],
+          () => {
+            // Update local state
+            const tag = this.tags.get(tagId);
+            if (tag) {
+              const updatedTags = [...existingTags, { tagid: tagId, tagname: tag.name }];
+              runInAction(() => {
+                this.imagetags.set(imageId, updatedTags);
+              });
+              this.addLog(`Added tag ${tag.name} to image ${imageId}`);
+            }
+            resolve();
+          },
+          (_, er) => {
+            this.addLog(`ADD TAG TO PHOTO ERR: ${er.message}`);
+            reject(er);
+          }
+        );
+      });
+    });
+  };
+
   removeTagFromPhoto = (tagid, imageid) => {
     return new Promise((resolve, reject) => {
       let imagetags = this.imagetags.get(imageid);
@@ -426,6 +521,75 @@ export class RootStore {
       } else {
         resolve();
       }
+    });
+  };
+
+  deleteTag = (tagId) => {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        // First remove all image associations
+        tx.executeSql(
+          'DELETE FROM ImageTags WHERE tagid = ?',
+          [tagId],
+          () => {
+            // Remove from TagsTree
+            tx.executeSql(
+              'DELETE FROM TagsTree WHERE id = ?',
+              [tagId],
+              () => {
+                // Remove the tag itself
+                tx.executeSql(
+                  'DELETE FROM Tags WHERE id = ?',
+                  [tagId],
+                  () => {
+                    // Update local state
+                    const tag = this.tags.get(tagId);
+                    if (tag) {
+                      runInAction(() => {
+                        // Remove from all image tags
+                        this.imagetags.forEach((tags, imageId) => {
+                          const filteredTags = tags.filter(t => t.tagid !== tagId);
+                          this.imagetags.set(imageId, filteredTags);
+                        });
+                        
+                        // Remove from tags map
+                        this.tags.delete(tagId);
+                        
+                        // Remove from tree
+                        this.tagTree.delete(tagId);
+                        
+                        // Remove from parent's children if it has a parent
+                        this.tags.forEach(parentTag => {
+                          parentTag.children = parentTag.children.filter(child => child.id !== tagId);
+                        });
+                        
+                        // Remove from filters
+                        this.activeFilters.tagIds.delete(tagId);
+                        this.wallpaperTags.delete(tagId);
+                      });
+                      
+                      this.addLog(`Deleted tag: ${tag.name}`);
+                    }
+                    resolve();
+                  },
+                  (_, er) => {
+                    this.addLog(`DELETE TAG ERR: ${er.message}`);
+                    reject(er);
+                  }
+                );
+              },
+              (_, er) => {
+                this.addLog(`DELETE TAG TREE ERR: ${er.message}`);
+                reject(er);
+              }
+            );
+          },
+          (_, er) => {
+            this.addLog(`DELETE TAG ASSOCIATIONS ERR: ${er.message}`);
+            reject(er);
+          }
+        );
+      });
     });
   };
 
@@ -597,3 +761,5 @@ export class RootStore {
     }
   };
 }
+
+export const rootStore = new RootStore();

@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import Gallery from 'react-native-awesome-gallery';
 import { useState } from 'react';
-import { Modal, Text, ToastAndroid, View } from 'react-native';
+import { Modal, Text, ToastAndroid, View, Alert } from 'react-native';
 import { ImageInfo } from '@/components/molecules/ImageInfo';
 import { Button } from '@/components/molecules';
 import { styles } from './styles';
@@ -37,7 +37,7 @@ function ImageSlider({ route }) {
       setSelectedTag(tag);
       setModalVisible(true);
     } else {
-      ToastAndroid.show('Такого тега не нашли', ToastAndroid.LONG);
+      ToastAndroid.show('Tag not found', ToastAndroid.LONG);
     }
   };
   
@@ -45,15 +45,50 @@ function ImageSlider({ route }) {
 
   const removeTag = async () => {
     setProcess(true);
-    store
-      .removeTagFromPhoto(selectedTag.id, selectedImage.id)
-      .then(hideTagsModal)
-      .catch(() => {
-        ToastAndroid.show('Не получилось удалить тег', ToastAndroid.LONG);
-      })
-      .finally(() => {
-        setProcess(false);
-      });
+    try {
+      await store.removeTagFromPhoto(selectedTag.id, selectedImage.id);
+      hideTagsModal();
+    } catch (error) {
+      ToastAndroid.show('Failed to remove tag', ToastAndroid.LONG);
+    } finally {
+      setProcess(false);
+    }
+  };
+
+  const findPhotosWithTag = () => {
+    store.resetFilters();
+    store.addTagToFilters(selectedTag.id);
+    store.selectPhotos({
+      albumIds: [],
+      tagIds: [selectedTag.id],
+    });
+    hideTagsModal();
+  };
+
+  const deleteTagCompletely = () => {
+    Alert.alert(
+      'Delete Tag',
+      `Are you sure you want to delete the tag "${selectedTag.name}" completely? This will remove it from all photos and cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setProcess(true);
+            try {
+              await store.deleteTag(selectedTag.id);
+              hideTagsModal();
+              ToastAndroid.show('Tag deleted successfully', ToastAndroid.SHORT);
+            } catch (error) {
+              ToastAndroid.show('Failed to delete tag', ToastAndroid.LONG);
+            } finally {
+              setProcess(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -81,25 +116,30 @@ function ImageSlider({ route }) {
         <View style={styles.modalWrapper}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              Тег {selectedTag?.name}
+              Tag: {selectedTag?.name}
             </Text>
             {isInProcess && (
-              <Text style={styles.modalProcessing}>Обработка...</Text>
+              <Text style={styles.modalProcessing}>Processing...</Text>
             )}
             <View style={styles.modalButtons}>
               <Button 
-                title="Удалить" 
+                title="Remove from Photo" 
                 onPress={removeTag}
                 color="#ff0000"
               />
               <Button 
-                title="Найти все фото" 
-                onPress={hideTagsModal}
+                title="Find All Photos" 
+                onPress={findPhotosWithTag}
                 color="#00ff00"
                 textColor="#000000"
               />
               <Button 
-                title="Закрыть" 
+                title="Delete Tag Completely" 
+                onPress={deleteTagCompletely}
+                color="#ff0000"
+              />
+              <Button 
+                title="Close" 
                 onPress={hideTagsModal}
               />
             </View>
