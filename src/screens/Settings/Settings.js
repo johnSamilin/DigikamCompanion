@@ -4,9 +4,17 @@ import { ScrollView, Text, View } from 'react-native';
 import { useStore } from '@/store';
 import { Button, FolderPicker, TagTree } from '@/components/molecules';
 import { styles } from './styles';
+import { useEffect } from 'react';
 
 function Settings() {
   const store = useStore();
+
+  useEffect(() => {
+    // Analyze photo sorting when component mounts and root folder is available
+    if (store.normalizedRootPath && !store.photoSortStats) {
+      store.analyzePhotoSorting();
+    }
+  }, [store.normalizedRootPath]);
 
   const toggleTag = (newState, id) => {
     if (newState) {
@@ -28,6 +36,57 @@ function Settings() {
     if (!store.lastWallpaperUpdate) return 'Never';
     const date = new Date(store.lastWallpaperUpdate);
     return date.toLocaleString();
+  };
+
+  const handleAnalyzePhotos = () => {
+    store.analyzePhotoSorting();
+  };
+
+  const handleSortPhotos = () => {
+    store.sortPhotos();
+  };
+
+  const renderPhotoSortStats = () => {
+    if (!store.photoSortStats) return null;
+
+    if (store.photoSortStats.error) {
+      return (
+        <Text style={styles.errorText}>
+          Error: {store.photoSortStats.error}
+        </Text>
+      );
+    }
+
+    if (store.photoSortStats.totalPhotos === 0) {
+      return (
+        <Text style={styles.infoText}>
+          No photos found in DCIM folder
+        </Text>
+      );
+    }
+
+    return (
+      <View style={styles.statsContainer}>
+        <Text style={styles.statsText}>
+          📸 {store.photoSortStats.totalPhotos} photos will be moved
+        </Text>
+        <Text style={styles.statsText}>
+          📁 {store.photoSortStats.foldersToCreate.length} folders will be created:
+        </Text>
+        <View style={styles.foldersList}>
+          {store.photoSortStats.foldersToCreate.slice(0, 10).map(folder => (
+            <Text key={folder} style={styles.folderText}>
+              • {folder}
+            </Text>
+          ))}
+          {store.photoSortStats.foldersToCreate.length > 10 && (
+            <Text style={styles.folderText}>
+              ... and {store.photoSortStats.foldersToCreate.length - 10} more
+            </Text>
+          )}
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -66,6 +125,39 @@ function Settings() {
           {store.hasUnsavedChanges && (
             <Text style={styles.warningText}>
               You have unsaved changes that will be synced back to Digikam database
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Sort Photos</Text>
+          <Text style={styles.description}>
+            Move photos from DCIM to organized year/month structure in your root folder
+          </Text>
+          
+          {renderPhotoSortStats()}
+          
+          <View style={styles.buttons}>
+            <Button 
+              title="Analyze" 
+              onPress={handleAnalyzePhotos}
+              color="#1a1a1a"
+              disabled={!store.normalizedRootPath}
+            />
+            {store.photoSortStats && store.photoSortStats.totalPhotos > 0 && (
+              <Button 
+                title={store.isSortingPhotos ? "Sorting..." : "Sort Photos"}
+                onPress={handleSortPhotos}
+                color="#00ff00"
+                textColor="#000000"
+                disabled={store.isSortingPhotos}
+              />
+            )}
+          </View>
+          
+          {!store.normalizedRootPath && (
+            <Text style={styles.warningText}>
+              Please select a root folder first
             </Text>
           )}
         </View>

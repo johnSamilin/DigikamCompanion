@@ -3,6 +3,11 @@ import { Dimensions, NativeModules, ToastAndroid, AppState } from 'react-native'
 import {
   copyFile,
   DocumentDirectoryPath,
+  readDir,
+  stat,
+  moveFile,
+  mkdir,
+  exists,
 } from 'react-native-fs';
 import { MMKV } from 'react-native-mmkv';
 import SQLite from 'react-native-sqlite-storage';
@@ -37,6 +42,8 @@ export class RootStore {
   wallpaperType = 'both'; // 'home', 'lock', or 'both'
   lastWallpaperUpdate = null;
   hasUnsavedChanges = false;
+  photoSortStats = null;
+  isSortingPhotos = false;
 
   get isFilterApplied() {
     return (
@@ -745,6 +752,198 @@ export class RootStore {
     runInAction(() => {
       this.userSelectedImages.delete(id);
     });
+  };
+
+  // Photo sorting methods
+  analyzePhotoSorting = async () => {
+    if (!this.normalizedRootPath) {
+      this.addLog('Cannot analyze photo sorting: No root folder selected');
+      return;
+    }
+
+    try {
+      this.addLog('Analyzing DCIM folder for photo sorting...');
+      
+      const dcimPath = '/storage/emulated/0/DCIM';
+      const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
+      
+      // Check if DCIM exists
+      const dcimExists = await exists(dcimPath);
+      if (!dcimExists) {
+        runInAction(() => {
+          this.photoSortStats = {
+            totalPhotos: 0,
+            foldersToCreate: [],
+            error: 'DCIM folder not found'
+          };
+        });
+        return;
+      }
+
+      const photoExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic', '.raw', '.dng'];
+      const photosToMove = [];
+      const foldersToCreate = new Set();
+
+      // Recursively scan DCIM folder
+      const scanFolder = async (folderPath) => {
+        try {
+          const items = await readDir(folderPath);
+          
+          for (const item of items) {
+            if (item.isDirectory()) {
+              await scanFolder(item.path);
+            } else if (item.isFile()) {
+              const extension = item.name.toLowerCase().substring(item.name.lastIndexOf('.'));
+              if (photoExtensions.includes(extension)) {
+                try {
+                  const fileStats = await stat(item.path);
+                  const modDate = new Date(fileStats.mtime);
+                  const year = modDate.getFullYear();
+                  const month = String(modDate.getMonth() + 1).padStart(2, '0');
+                  
+                  const targetFolder = `${year}/${month}`;
+                  const targetPath = `${rootPath}/${targetFolder}`;
+                  
+                  photosToMove.push({
+                    sourcePath: item.path,
+                    targetPath: `${targetPath}/${item.name}`,
+                    targetFolder,
+                    fileName: item.name,
+                    modDate: modDate.toISOString(),
+                  });
+                  
+                  foldersToCreate.add(targetFolder);
+                } catch (statError) {
+                  this.addLog(`Failed to get stats for ${item.path}: ${statError.message}`);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          this.addLog(`Failed to scan folder ${folderPath}: ${error.message}`);
+        }
+      };
+
+      await scanFolder(dcimPath);
+
+      runInAction(() => {
+        this.photoSortStats = {
+          totalPhotos: photosToMove.length,
+          foldersToCreate: Array.from(foldersToCreate).sort(),
+          photosToMove,
+          error: null
+        };
+      });
+
+      this.addLog(`Photo sorting analysis complete: ${photosToMove.length} photos found, ${foldersToCreate.size} folders to create`);
+
+    } catch (error) {
+      this.addLog(`Photo sorting analysis failed: ${error.message}`);
+      runInAction(() => {
+        this.photoSortStats = {
+          totalPhotos: 0,
+          foldersToCreate: [],
+          error: error.message
+        };
+      });
+    }
+  };
+
+  sortPhotos = async () => {
+    if (!this.photoSortStats || this.photoSortStats.totalPhotos === 0) {
+      ToastAndroid.show('No photos to sort. Run analysis first.', ToastAndroid.LONG);
+      return;
+    }
+
+    if (this.isSortingPhotos) {
+      ToastAndroid.show('Photo sorting already in progress', ToastAndroid.SHORT);
+      return;
+    }
+
+    runInAction(() => {
+      this.isSortingPhotos = true;
+    });
+
+    try {
+      this.addLog('Starting photo sorting process...');
+      const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
+      
+      // Create all necessary folders first
+      for (const folder of this.photoSortStats.foldersToCreate) {
+        const folderPath = `${rootPath}/${folder}`;
+        try {
+          const folderExists = await exists(folderPath);
+          if (!folderExists) {
+            await mkdir(folderPath, { NSURLIsExcludedFromBackupKey: false });
+            this.addLog(`Created folder: ${folder}`);
+          }
+        } catch (error) {
+          this.addLog(`Failed to create folder ${folder}: ${error.message}`);
+        }
+      }
+
+      // Move photos in batches
+      let movedCount = 0;
+      let errorCount = 0;
+      const batchSize = 10;
+      
+      for (let i = 0; i < this.photoSortStats.photosToMove.length; i += batchSize) {
+        const batch = this.photoSortStats.photosToMove.slice(i, i + batchSize);
+        
+        for (const photo of batch) {
+          try {
+            // Check if target file already exists
+            const targetExists = await exists(photo.targetPath);
+            if (targetExists) {
+              // Generate unique filename
+              const extension = photo.fileName.substring(photo.fileName.lastIndexOf('.'));
+              const baseName = photo.fileName.substring(0, photo.fileName.lastIndexOf('.'));
+              let counter = 1;
+              let newTargetPath = photo.targetPath;
+              
+              while (await exists(newTargetPath)) {
+                const newFileName = `${baseName}_${counter}${extension}`;
+                newTargetPath = `${photo.targetPath.substring(0, photo.targetPath.lastIndexOf('/'))}/${newFileName}`;
+                counter++;
+              }
+              
+              photo.targetPath = newTargetPath;
+            }
+            
+            await moveFile(photo.sourcePath, photo.targetPath);
+            movedCount++;
+            this.addLog(`Moved: ${photo.fileName} -> ${photo.targetFolder}`);
+          } catch (error) {
+            errorCount++;
+            this.addLog(`Failed to move ${photo.fileName}: ${error.message}`);
+          }
+        }
+        
+        // Update progress
+        ToastAndroid.show(
+          `Moved ${movedCount}/${this.photoSortStats.totalPhotos} photos...`,
+          ToastAndroid.SHORT
+        );
+      }
+
+      const message = `Photo sorting complete! Moved ${movedCount} photos, ${errorCount} errors`;
+      ToastAndroid.show(message, ToastAndroid.LONG);
+      this.addLog(message);
+
+      // Clear stats after successful sort
+      runInAction(() => {
+        this.photoSortStats = null;
+      });
+
+    } catch (error) {
+      const message = `Photo sorting failed: ${error.message}`;
+      ToastAndroid.show(message, ToastAndroid.LONG);
+      this.addLog(message);
+    } finally {
+      runInAction(() => {
+        this.isSortingPhotos = false;
+      });
+    }
   };
 
   // Wallpaper settings
