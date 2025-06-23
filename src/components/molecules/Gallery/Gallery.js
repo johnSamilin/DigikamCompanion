@@ -7,11 +7,12 @@ import {
 } from 'react-native';
 import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import { CommonActions } from '@react-navigation/native';
 import Share from 'react-native-share';
 import { Button } from '@/components/molecules';
+import { BulkTagManager } from '@/components/molecules/BulkTagManager/BulkTagManager';
 import { styles } from './styles';
 
 const screenWidth = Dimensions.get('window').width;
@@ -99,6 +100,7 @@ const Row = observer(({ item, onPress }) => {
 
 export const Gallery = observer(({ navigation }) => {
   const store = useStore();
+  const [showBulkTagManager, setShowBulkTagManager] = useState(false);
 
   const openFilters = useCallback(() => {
     navigation.dispatch(
@@ -198,9 +200,19 @@ export const Gallery = observer(({ navigation }) => {
           <Button onPress={openFilters} title="Фильтр" color="#00ff00" textColor="#000000" />
         </View>
         {store.userSelectedImages.size > 0 && (
-          <View style={styles.button}>
-            <Button onPress={handleShare} title="Поделиться" />
-          </View>
+          <>
+            <View style={styles.button}>
+              <Button 
+                onPress={() => setShowBulkTagManager(true)} 
+                title="Edit Tags" 
+                color="#ff8800"
+                textColor="#000000"
+              />
+            </View>
+            <View style={styles.button}>
+              <Button onPress={handleShare} title="Поделиться" />
+            </View>
+          </>
         )}
       </View>
       {store.isPermissionDenied && (
@@ -209,6 +221,11 @@ export const Gallery = observer(({ navigation }) => {
           приложения)
         </Text>
       )}
+      
+      <BulkTagManager
+        visible={showBulkTagManager}
+        onClose={() => setShowBulkTagManager(false)}
+      />
     </View>
   );
 });
