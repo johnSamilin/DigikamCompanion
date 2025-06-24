@@ -68,10 +68,10 @@ function Settings() {
     return (
       <View style={styles.statsContainer}>
         <Text style={styles.statsText}>
-          📸 {store.photoSortStats.totalPhotos} photos will be moved
+          📸 {store.photoSortStats.totalPhotos} photos will be moved and added to database
         </Text>
         <Text style={styles.statsText}>
-          📁 {store.photoSortStats.foldersToCreate.length} folders will be created:
+          📁 {store.photoSortStats.foldersToCreate.length} albums will be created:
         </Text>
         <View style={styles.foldersList}>
           {store.photoSortStats.foldersToCreate.slice(0, 10).map(folder => (
@@ -85,6 +85,9 @@ function Settings() {
             </Text>
           )}
         </View>
+        <Text style={styles.infoText}>
+          Photos will be organized by date and automatically indexed in Digikam database
+        </Text>
       </View>
     );
   };
@@ -132,7 +135,7 @@ function Settings() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sort Photos</Text>
           <Text style={styles.description}>
-            Move photos from DCIM to organized year/month structure in your root folder
+            Move photos from DCIM to organized year/month structure and add them to Digikam database
           </Text>
           
           {renderPhotoSortStats()}
