@@ -523,51 +523,72 @@ export class RootStore {
         return;
       }
 
+      this.addLog(`Finding or creating album: ${relativePath}`);
+
       // First check if album already exists
       const existingAlbum = Array.from(this.albums.values()).find(
         album => album.relativePath === relativePath
       );
 
       if (existingAlbum) {
+        this.addLog(`Album already exists: ${relativePath} (ID: ${existingAlbum.id})`);
         resolve(existingAlbum.id);
         return;
       }
 
-      // Create new album
+      // Create new album with timeout protection
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Album creation timeout for ${relativePath}`));
+      }, 10000); // 10 second timeout
+
       this.db.transaction(tx => {
         // Get the next available album ID
         tx.executeSql(
           'SELECT MAX(id) as maxId FROM Albums',
           [],
           (_, res) => {
-            const nextId = (res.rows.item(0).maxId || 0) + 1;
-            
-            // Insert the new album (albumRoot is typically 1 for main collection)
-            tx.executeSql(
-              'INSERT INTO Albums (id, albumRoot, relativePath) VALUES (?, ?, ?)',
-              [nextId, 1, relativePath],
-              (_, albumRes) => {
-                // Update local state
-                const newAlbum = { id: nextId, albumRoot: 1, relativePath };
-                runInAction(() => {
-                  this.albums.set(nextId, newAlbum);
-                });
-                
-                this.markDatabaseChanged();
-                this.addLog(`Created album: ${relativePath} (ID: ${nextId})`);
-                resolve(nextId);
-              },
-              (_, er) => {
-                this.addLog(`CREATE ALBUM ERR: ${er.message}`);
-                reject(er);
-              }
-            );
+            try {
+              const nextId = (res.rows.item(0).maxId || 0) + 1;
+              this.addLog(`Creating album with ID ${nextId}: ${relativePath}`);
+              
+              // Insert the new album (albumRoot is typically 1 for main collection)
+              tx.executeSql(
+                'INSERT INTO Albums (id, albumRoot, relativePath) VALUES (?, ?, ?)',
+                [nextId, 1, relativePath],
+                (_, albumRes) => {
+                  clearTimeout(timeoutId);
+                  // Update local state
+                  const newAlbum = { id: nextId, albumRoot: 1, relativePath };
+                  runInAction(() => {
+                    this.albums.set(nextId, newAlbum);
+                  });
+                  
+                  this.markDatabaseChanged();
+                  this.addLog(`Successfully created album: ${relativePath} (ID: ${nextId})`);
+                  resolve(nextId);
+                },
+                (_, er) => {
+                  clearTimeout(timeoutId);
+                  this.addLog(`CREATE ALBUM ERR: ${er.message}`);
+                  reject(er);
+                }
+              );
+            } catch (error) {
+              clearTimeout(timeoutId);
+              this.addLog(`Error in album creation: ${error.message}`);
+              reject(error);
+            }
           },
           (_, er) => {
+            clearTimeout(timeoutId);
             this.addLog(`GET MAX ALBUM ID ERR: ${er.message}`);
             reject(er);
           }
         );
+      }, (error) => {
+        clearTimeout(timeoutId);
+        this.addLog(`Album creation transaction failed: ${error.message}`);
+        reject(error);
       });
     });
   };
@@ -579,46 +600,67 @@ export class RootStore {
         return;
       }
 
+      this.addLog(`Adding image to database: ${fileName} (album: ${albumId})`);
+
+      // Add timeout protection
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Image database insertion timeout for ${fileName}`));
+      }, 5000); // 5 second timeout
+
       this.db.transaction(tx => {
         // Get the next available image ID
         tx.executeSql(
           'SELECT MAX(id) as maxId FROM Images',
           [],
           (_, res) => {
-            const nextId = (res.rows.item(0).maxId || 0) + 1;
-            
-            // Prepare image metadata
-            const modificationDate = new Date(fileStats.mtime);
-            const creationDate = modificationDate; // Use modification date as creation date
-            
-            // Insert the new image
-            tx.executeSql(
-              `INSERT INTO Images (
-                id, name, album, modificationDate, fileSize, uniqueHash
-              ) VALUES (?, ?, ?, ?, ?, ?)`,
-              [
-                nextId,
-                fileName,
-                albumId,
-                modificationDate.toISOString(),
-                fileStats.size,
-                `${fileName}_${Date.now()}` // Simple unique hash
-              ],
-              (_, imageRes) => {
-                this.addLog(`Added image to database: ${fileName} (ID: ${nextId})`);
-                resolve(nextId);
-              },
-              (_, er) => {
-                this.addLog(`ADD IMAGE ERR: ${er.message}`);
-                reject(er);
-              }
-            );
+            try {
+              const nextId = (res.rows.item(0).maxId || 0) + 1;
+              
+              // Prepare image metadata
+              const modificationDate = new Date(fileStats.mtime);
+              
+              this.addLog(`Creating image record with ID ${nextId}: ${fileName}`);
+              
+              // Insert the new image
+              tx.executeSql(
+                `INSERT INTO Images (
+                  id, name, album, modificationDate, fileSize, uniqueHash
+                ) VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                  nextId,
+                  fileName,
+                  albumId,
+                  modificationDate.toISOString(),
+                  fileStats.size,
+                  `${fileName}_${Date.now()}` // Simple unique hash
+                ],
+                (_, imageRes) => {
+                  clearTimeout(timeoutId);
+                  this.addLog(`Successfully added image to database: ${fileName} (ID: ${nextId})`);
+                  resolve(nextId);
+                },
+                (_, er) => {
+                  clearTimeout(timeoutId);
+                  this.addLog(`ADD IMAGE ERR: ${er.message}`);
+                  reject(er);
+                }
+              );
+            } catch (error) {
+              clearTimeout(timeoutId);
+              this.addLog(`Error in image database insertion: ${error.message}`);
+              reject(error);
+            }
           },
           (_, er) => {
+            clearTimeout(timeoutId);
             this.addLog(`GET MAX IMAGE ID ERR: ${er.message}`);
             reject(er);
           }
         );
+      }, (error) => {
+        clearTimeout(timeoutId);
+        this.addLog(`Image database transaction failed: ${error.message}`);
+        reject(error);
       });
     });
   };
@@ -738,7 +780,8 @@ export class RootStore {
       this.addLog('Starting photo sorting process...');
       const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
       
-      // Create all necessary folders first
+      // Step 1: Create all necessary folders first
+      this.addLog('Step 1: Creating folder structure...');
       for (const folder of this.photoSortStats.foldersToCreate) {
         const folderPath = `${rootPath}/${folder}`;
         try {
@@ -746,35 +789,45 @@ export class RootStore {
           if (!folderExists) {
             await mkdir(folderPath, { NSURLIsExcludedFromBackupKey: false });
             this.addLog(`Created folder: ${folder}`);
+          } else {
+            this.addLog(`Folder already exists: ${folder}`);
           }
         } catch (error) {
           this.addLog(`Failed to create folder ${folder}: ${error.message}`);
+          throw error; // Stop if we can't create folders
         }
       }
 
-      // Create albums in database for each folder
+      // Step 2: Create albums in database for each folder
+      this.addLog('Step 2: Creating database albums...');
       const albumMap = new Map();
       for (const folder of this.photoSortStats.foldersToCreate) {
         try {
+          this.addLog(`Creating album for folder: ${folder}`);
           const albumId = await this.findOrCreateAlbum(`/${folder}`);
           albumMap.set(folder, albumId);
           this.addLog(`Album ready: ${folder} (ID: ${albumId})`);
         } catch (error) {
           this.addLog(`Failed to create album for ${folder}: ${error.message}`);
+          // Continue with other albums even if one fails
         }
       }
 
-      // Move photos in batches and add to database
+      // Step 3: Move photos in smaller batches and add to database
+      this.addLog('Step 3: Moving photos and updating database...');
       let movedCount = 0;
       let errorCount = 0;
       let addedToDbCount = 0;
-      const batchSize = 10;
+      const batchSize = 5; // Reduced batch size for better progress tracking
       
       for (let i = 0; i < this.photoSortStats.photosToMove.length; i += batchSize) {
         const batch = this.photoSortStats.photosToMove.slice(i, i + batchSize);
+        this.addLog(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(this.photoSortStats.photosToMove.length/batchSize)}`);
         
         for (const photo of batch) {
           try {
+            this.addLog(`Processing photo: ${photo.fileName}`);
+            
             // Check if target file already exists
             const targetExists = await exists(photo.targetPath);
             if (targetExists) {
@@ -793,40 +846,51 @@ export class RootStore {
               
               photo.targetPath = newTargetPath;
               photo.fileName = newFileName;
+              this.addLog(`Renamed to avoid conflict: ${newFileName}`);
             }
             
             // Move the file
+            this.addLog(`Moving file: ${photo.sourcePath} -> ${photo.targetPath}`);
             await moveFile(photo.sourcePath, photo.targetPath);
             movedCount++;
-            this.addLog(`Moved: ${photo.fileName} -> ${photo.targetFolder}`);
+            this.addLog(`Successfully moved: ${photo.fileName} -> ${photo.targetFolder}`);
             
             // Add to database
             const albumId = albumMap.get(photo.targetFolder);
             if (albumId && this.isDatabaseReady) {
               try {
+                this.addLog(`Adding to database: ${photo.fileName}`);
                 // Get updated file stats after move
                 const newFileStats = await stat(photo.targetPath);
                 await this.addImageToDatabase(photo.fileName, albumId, newFileStats);
                 addedToDbCount++;
+                this.addLog(`Successfully added to database: ${photo.fileName}`);
               } catch (dbError) {
                 this.addLog(`Failed to add ${photo.fileName} to database: ${dbError.message}`);
+                // Continue even if database addition fails
               }
+            } else {
+              this.addLog(`Skipping database addition for ${photo.fileName}: albumId=${albumId}, dbReady=${this.isDatabaseReady}`);
             }
             
           } catch (error) {
             errorCount++;
-            this.addLog(`Failed to move ${photo.fileName}: ${error.message}`);
+            this.addLog(`Failed to process ${photo.fileName}: ${error.message}`);
+            // Continue with next photo even if this one fails
           }
         }
         
-        // Update progress
-        ToastAndroid.show(
-          `Moved ${movedCount}/${this.photoSortStats.totalPhotos} photos...`,
-          ToastAndroid.SHORT
-        );
+        // Update progress more frequently
+        const progressMessage = `Processed ${Math.min(i + batchSize, this.photoSortStats.totalPhotos)}/${this.photoSortStats.totalPhotos} photos...`;
+        ToastAndroid.show(progressMessage, ToastAndroid.SHORT);
+        this.addLog(progressMessage);
+        
+        // Small delay to prevent overwhelming the system
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      // Refresh albums and images data
+      // Step 4: Refresh albums and images data
+      this.addLog('Step 4: Refreshing data...');
       if (addedToDbCount > 0) {
         try {
           await this.readAlbums();
@@ -853,6 +917,7 @@ export class RootStore {
       runInAction(() => {
         this.isSortingPhotos = false;
       });
+      this.addLog('Photo sorting process finished');
     }
   };
 
