@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-
+    <!-- Background color -->
     <item android:drawable="@color/splashscreen_bg"/>
-
+    
+    <!-- App icon in center -->
     <item>
         <bitmap
             android:gravity="center"
             android:src="@drawable/splash_icon"
         />
     </item>
-
 </layer-list>
