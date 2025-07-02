@@ -592,7 +592,7 @@ export class RootStore {
       // Add timeout protection
       const timeoutId = setTimeout(() => {
         reject(new Error(`Image database insertion timeout for ${fileName}`));
-      }, 5000); // 5 second timeout
+      }, 10000); // 10 second timeout
 
       this.db.transaction(tx => {
         // Get the next available image ID
@@ -605,21 +605,34 @@ export class RootStore {
               
               // Prepare image metadata
               const modificationDate = new Date(fileStats.mtime);
+              const creationDate = new Date(fileStats.ctime || fileStats.mtime);
               
               this.addLog(`Creating image record with ID ${nextId}: ${fileName}`);
               
-              // Insert the new image
+              // Insert the new image with all required fields
               tx.executeSql(
                 `INSERT INTO Images (
-                  id, name, album, modificationDate, fileSize, uniqueHash
-                ) VALUES (?, ?, ?, ?, ?, ?)`,
+                  id, name, album, modificationDate, fileSize, uniqueHash,
+                  status, category, format, colorDepth, colorModel,
+                  creationDate, digitizationDate, orientation, width, height
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                   nextId,
                   fileName,
                   albumId,
                   modificationDate.toISOString(),
                   fileStats.size,
-                  `${fileName}_${Date.now()}` // Simple unique hash
+                  `${fileName}_${Date.now()}`, // Simple unique hash
+                  1, // status: 1 = visible
+                  1, // category: 1 = image
+                  'JPEG', // format - default to JPEG, could be improved to detect actual format
+                  8, // colorDepth - default to 8 bits
+                  'RGB', // colorModel - default to RGB
+                  creationDate.toISOString(),
+                  modificationDate.toISOString(), // digitizationDate
+                  1, // orientation: 1 = normal
+                  0, // width - will be 0 until image is analyzed
+                  0  // height - will be 0 until image is analyzed
                 ],
                 (_, imageRes) => {
                   clearTimeout(timeoutId);
