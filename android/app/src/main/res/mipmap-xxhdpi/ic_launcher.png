@@ -1,0 +1,18 @@
+<svg width="144" height="144" viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="144" height="144" rx="32" fill="#1a1a1a"/>
+  
+  <!-- Camera body -->
+  <rect x="24" y="40" width="96" height="64" rx="8" fill="#ffffff"/>
+  
+  <!-- Lens -->
+  <circle cx="72" cy="72" r="24" fill="#1a1a1a"/>
+  <circle cx="72" cy="72" r="16" fill="#00ff00"/>
+  <circle cx="72" cy="72" r="8" fill="#1a1a1a"/>
+  
+  <!-- Flash -->
+  <rect x="104" y="48" width="8" height="8" rx="4" fill="#00ff00"/>
+  
+  <!-- Viewfinder -->
+  <rect x="32" y="32" width="16" height="8" rx="4" fill="#ffffff"/>
+</svg>

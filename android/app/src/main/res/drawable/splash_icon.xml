@@ -32,12 +32,22 @@
         android:fillColor="#1a1a1a"/>
     
     <!-- Flash -->
-    <path
-        android:fillColor="#00ff00"
-        android:pathData="M85,40 L93,40 A4,4 0 0,1 97,44 L97,48 A4,4 0 0,1 93,52 L85,52 A4,4 0 0,1 81,48 L81,44 A4,4 0 0,1 85,40 Z"/>
+    <rect
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:fillColor="#00ff00">
+        <aapt:attr name="android:pathData">
+            M85,40 L93,40 A4,4 0 0,1 97,44 L97,48 A4,4 0 0,1 93,52 L85,52 A4,4 0 0,1 81,48 L81,44 A4,4 0 0,1 85,40 Z
+        </aapt:attr>
+    </rect>
     
     <!-- Viewfinder -->
-    <path
-        android:fillColor="#ffffff"
-        android:pathData="M28,28 L44,28 A4,4 0 0,1 48,32 L48,36 A4,4 0 0,1 44,40 L28,40 A4,4 0 0,1 24,36 L24,32 A4,4 0 0,1 28,28 Z"/>
+    <rect
+        android:layout_width="16dp"
+        android:layout_height="8dp"
+        android:fillColor="#ffffff">
+        <aapt:attr name="android:pathData">
+            M28,28 L44,28 A4,4 0 0,1 48,32 L48,36 A4,4 0 0,1 44,40 L28,40 A4,4 0 0,1 24,36 L24,32 A4,4 0 0,1 28,28 Z
+        </aapt:attr>
+    </rect>
 </vector>
