@@ -37,8 +37,6 @@ export class RootStore {
   orientaion = 'P';
   fileUriPrefix = `file://`;
   wallpaperTags = new Set();
-  wallpaperFrequency = 1;
-  wallpaperTimer = null;
   wallpaperType = 'both'; // 'home', 'lock', or 'both'
   lastWallpaperUpdate = null;
   hasUnsavedChanges = false;
@@ -73,17 +71,11 @@ export class RootStore {
     makeAutoObservable(this);
     this.rootFolder = mmkv.getString('rootfolder');
     this.wallpaperTags = new Set(JSON.parse(mmkv.getString('wallpaperTags') || '[]'));
-    this.wallpaperFrequency = parseInt(mmkv.getString('wallpaperFrequency') || '1', 10);
     this.wallpaperType = mmkv.getString('wallpaperType') || 'both';
     this.lastWallpaperUpdate = mmkv.getString('lastWallpaperUpdate');
     
     if (this.rootFolder) {
-      this.getDBConnection().then(() => {
-        // Only start wallpaper service after database is ready
-        if (this.wallpaperTags.size > 0) {
-          this.checkAndStartWallpaperService();
-        }
-      }).catch(error => {
+      this.getDBConnection().catch(error => {
         this.addLog(`Failed to initialize database: ${error.message}`);
       });
     }
@@ -203,12 +195,7 @@ export class RootStore {
   setRootFolder = value => {
     this.rootFolder = value;
     mmkv.set('rootfolder', value);
-    this.getDBConnection().then(() => {
-      // Start wallpaper service after database is ready
-      if (this.wallpaperTags.size > 0) {
-        this.checkAndStartWallpaperService();
-      }
-    }).catch(error => {
+    this.getDBConnection().catch(error => {
       this.addLog(`Failed to initialize database after folder selection: ${error.message}`);
     });
   };
@@ -1166,9 +1153,6 @@ export class RootStore {
       this.wallpaperTags.add(id);
       mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
     });
-    if (this.isDatabaseReady) {
-      this.checkAndStartWallpaperService();
-    }
   };
 
   removeWallpaperTag = id => {
@@ -1176,21 +1160,6 @@ export class RootStore {
       this.wallpaperTags.delete(id);
       mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
     });
-    if (this.wallpaperTags.size === 0) {
-      this.stopWallpaperService();
-    } else if (this.isDatabaseReady) {
-      this.checkAndStartWallpaperService();
-    }
-  };
-
-  setWallpaperFrequency = days => {
-    runInAction(() => {
-      this.wallpaperFrequency = days;
-      mmkv.set('wallpaperFrequency', days.toString());
-    });
-    if (this.isDatabaseReady) {
-      this.checkAndStartWallpaperService();
-    }
   };
 
   setWallpaperType = type => {
@@ -1200,84 +1169,24 @@ export class RootStore {
     });
   };
 
-  checkAndStartWallpaperService = () => {
-    if (!this.isDatabaseReady) {
-      this.addLog('Cannot start wallpaper service: Database not ready');
-      return;
-    }
-
-    if (this.wallpaperTags.size === 0) {
-      this.addLog('Cannot start wallpaper service: No wallpaper tags selected');
-      return;
-    }
-
-    // Check if enough time has passed since last update
-    const now = new Date().getTime();
-    const lastUpdate = this.lastWallpaperUpdate ? new Date(this.lastWallpaperUpdate).getTime() : 0;
-    const timeDiff = now - lastUpdate;
-    const requiredInterval = this.wallpaperFrequency * 24 * 60 * 60 * 1000; // Convert days to milliseconds
-
-    if (timeDiff >= requiredInterval || !this.lastWallpaperUpdate) {
-      // Update immediately if enough time has passed
-      this.updateWallpaper();
-    }
-
-    // Start the timer for future updates
-    this.startWallpaperService();
-  };
-
-  startWallpaperService = () => {
-    if (this.wallpaperTimer) {
-      clearInterval(this.wallpaperTimer);
-    }
-
-    if (!this.isDatabaseReady || this.wallpaperTags.size === 0) {
-      this.addLog('Cannot start wallpaper service: Database not ready or no tags selected');
-      return;
-    }
-
-    // Calculate next update time
-    const now = new Date().getTime();
-    const lastUpdate = this.lastWallpaperUpdate ? new Date(this.lastWallpaperUpdate).getTime() : now;
-    const nextUpdate = lastUpdate + (this.wallpaperFrequency * 24 * 60 * 60 * 1000);
-    const timeUntilNext = Math.max(0, nextUpdate - now);
-
-    // Set timeout for next update
-    this.wallpaperTimer = setTimeout(() => {
-      this.updateWallpaper();
-      // After first update, set regular interval
-      this.wallpaperTimer = setInterval(
-        this.updateWallpaper,
-        this.wallpaperFrequency * 24 * 60 * 60 * 1000
-      );
-    }, timeUntilNext);
-
-    this.addLog(`Wallpaper service started. Next update in ${Math.round(timeUntilNext / (1000 * 60 * 60))} hours`);
-  };
-
-  stopWallpaperService = () => {
-    if (this.wallpaperTimer) {
-      clearTimeout(this.wallpaperTimer);
-      clearInterval(this.wallpaperTimer);
-      this.wallpaperTimer = null;
-    }
-    this.addLog('Wallpaper service stopped');
-  };
-
   updateWallpaper = async () => {
     try {
       if (!this.isDatabaseReady) {
         this.addLog('Cannot update wallpaper: Database not ready');
+        ToastAndroid.show('Database not ready', ToastAndroid.SHORT);
         return;
       }
 
       if (this.wallpaperTags.size === 0) {
         this.addLog('Cannot update wallpaper: No wallpaper tags selected');
+        ToastAndroid.show('No wallpaper tags selected', ToastAndroid.SHORT);
         return;
       }
 
-      this.addLog('Starting wallpaper update...');
+      this.addLog('Starting manual wallpaper update...');
+      ToastAndroid.show('Updating wallpaper...', ToastAndroid.SHORT);
 
+      // Get photos with selected tags
       await this.selectPhotos({
         albumIds: [],
         tagIds: [...this.wallpaperTags],
@@ -1295,27 +1204,24 @@ export class RootStore {
 
       this.addLog(`Setting wallpaper: ${photo.name} (type: ${this.wallpaperType})`);
 
-      // Use a timeout to prevent blocking the UI
-      setTimeout(async () => {
-        try {
-          await NativeModules.WallpaperModule.setWallpaper(photo.uri, this.wallpaperType);
-          
-          // Update last wallpaper update time
-          const now = new Date().toISOString();
-          runInAction(() => {
-            this.lastWallpaperUpdate = now;
-          });
-          mmkv.set('lastWallpaperUpdate', now);
+      try {
+        await NativeModules.WallpaperModule.setWallpaper(photo.uri, this.wallpaperType);
+        
+        // Update last wallpaper update time
+        const now = new Date().toISOString();
+        runInAction(() => {
+          this.lastWallpaperUpdate = now;
+        });
+        mmkv.set('lastWallpaperUpdate', now);
 
-          const message = 'Wallpaper updated successfully';
-          ToastAndroid.show(message, ToastAndroid.SHORT);
-          this.addLog(`${message}: ${photo.name}`);
-        } catch (error) {
-          const message = `Failed to update wallpaper: ${error.message}`;
-          ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
-          this.addLog(message);
-        }
-      }, 100);
+        const message = 'Wallpaper updated successfully';
+        ToastAndroid.show(message, ToastAndroid.SHORT);
+        this.addLog(`${message}: ${photo.name}`);
+      } catch (error) {
+        const message = `Failed to set wallpaper: ${error.message}`;
+        ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
+        this.addLog(message);
+      }
 
     } catch (error) {
       const message = `Wallpaper update error: ${error.message}`;
@@ -1332,7 +1238,6 @@ export class RootStore {
 
   // Cleanup method to be called when app is closing
   cleanup = async () => {
-    this.stopWallpaperService();
     await this.syncDatabaseToOriginal();
     
     // Remove app state listener
