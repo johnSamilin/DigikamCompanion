@@ -4,9 +4,15 @@ import { styles } from './styles';
 import { useStore } from '@/store';
 import { observer } from 'mobx-react-lite';
 
-export const TagTree = observer(({ tag, level = 0, isSelected, onChangeState }) => {
+export const TagTree = observer(({ 
+  tag, 
+  level = 0, 
+  isSelected, 
+  onChangeState,
+  expandedTags = new Set(),
+  onToggleExpansion 
+}) => {
   const store = useStore();
-  const [isExpanded, setIsExpanded] = useState(false);
   
   // Check if this tag has descendants beyond immediate children
   const hasDeepDescendants = useCallback(() => {
@@ -24,11 +30,13 @@ export const TagTree = observer(({ tag, level = 0, isSelected, onChangeState }) 
 
   // Set default collapsed state for branches with deep descendants
   useEffect(() => {
-    if (tag.children && tag.children.length > 0) {
+    if (tag.children && tag.children.length > 0 && onToggleExpansion) {
       // Collapse by default if this branch has descendants beyond immediate children
-      setIsExpanded(!hasDeepDescendants());
+      if (!expandedTags.has(tag.id) && !hasDeepDescendants()) {
+        onToggleExpansion(tag.id, true); // Expand simple parent-child relationships
+      }
     }
-  }, [tag, hasDeepDescendants]);
+  }, [tag.id, tag.children, hasDeepDescendants, expandedTags, onToggleExpansion]);
   
   const areAllChildrenSelected = useCallback((currentTag) => {
     if (!currentTag.children || currentTag.children.length === 0) {
@@ -42,11 +50,14 @@ export const TagTree = observer(({ tag, level = 0, isSelected, onChangeState }) 
   }, [isSelected, tag.id, onChangeState]);
 
   const toggleExpansion = useCallback(() => {
-    setIsExpanded(!isExpanded);
-  }, [isExpanded]);
+    if (onToggleExpansion) {
+      onToggleExpansion(tag.id, !isExpanded);
+    }
+  }, [tag.id, isExpanded, onToggleExpansion]);
 
   const isCurrentSelected = isSelected || areAllChildrenSelected(tag);
   const hasChildren = tag.children && tag.children.length > 0;
+  const isExpanded = expandedTags.has(tag.id);
 
   return (
     <View>
@@ -79,6 +90,8 @@ export const TagTree = observer(({ tag, level = 0, isSelected, onChangeState }) 
           level={level + 1}
           isSelected={isCurrentSelected}
           onChangeState={onChangeState}
+          expandedTags={expandedTags}
+          onToggleExpansion={onToggleExpansion}
         />
       ))}
     </View>
