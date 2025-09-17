@@ -136,7 +136,9 @@ export const BulkTagManager = observer(({ visible, onClose }) => {
             <Text style={styles.tagName}>
               {tag.name}
               {isCommonToAll && <Text style={styles.commonIndicator}> (all)</Text>}
+              }
               {isAssignedToSome && !isCommonToAll && <Text style={styles.someIndicator}> (some)</Text>}
+              }
             </Text>
           </View>
           <View style={styles.tagActions}>
