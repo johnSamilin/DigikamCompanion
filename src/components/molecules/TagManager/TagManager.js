@@ -69,13 +69,35 @@ export const TagManager = observer(({ imageId, visible, onClose }) => {
     onClose();
   };
 
-  const renderTagTree = (tag, level = 0) => {
+  const renderTagTree = (tag, level = 0, expandedTags = new Set()) => {
     const isAssigned = imageTagIds.has(tag.id);
+    const hasChildren = tag.children && tag.children.length > 0;
+    const isExpanded = expandedTags.has(tag.id);
+    
+    const toggleExpansion = () => {
+      const newExpandedTags = new Set(expandedTags);
+      if (isExpanded) {
+        newExpandedTags.delete(tag.id);
+      } else {
+        newExpandedTags.add(tag.id);
+      }
+      // You might want to store this in component state if you need persistence
+    };
     
     return (
       <View key={tag.id}>
         <View style={[styles.tagItem, { paddingLeft: level * 20 + 16 }]}>
-          <Text style={styles.tagName}>{tag.name}</Text>
+          <View style={styles.tagRowContainer}>
+            {hasChildren && (
+              <TouchableOpacity onPress={toggleExpansion} style={styles.expandButton}>
+                <Text style={styles.expandIcon}>
+                  {isExpanded ? '▼' : '▶'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!hasChildren && <View style={styles.expandButtonPlaceholder} />}
+            <Text style={styles.tagName}>{tag.name}</Text>
+          </View>
           <View style={styles.tagActions}>
             {isAssigned ? (
               <Button
@@ -95,7 +117,7 @@ export const TagManager = observer(({ imageId, visible, onClose }) => {
             )}
           </View>
         </View>
-        {tag.children?.map(child => renderTagTree(child, level + 1))}
+        {hasChildren && isExpanded && tag.children.map(child => renderTagTree(child, level + 1, expandedTags))}
       </View>
     );
   };

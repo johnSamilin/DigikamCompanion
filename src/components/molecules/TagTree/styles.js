@@ -8,6 +8,30 @@ export const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: '#1a1a1a',
   },
+  rowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  expandButton: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  expandButtonPlaceholder: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+  },
+  expandIcon: {
+    fontSize: 12,
+    fontFamily: 'TT Tricks Trial Bold',
+    color: '#1a1a1a',
+  },
+  tagButton: {
+    flex: 1,
+  },
   innerContainer: {
     flexDirection: 'row',
     alignItems: 'center',

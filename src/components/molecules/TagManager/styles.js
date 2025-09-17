@@ -86,6 +86,28 @@ export const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
+  tagRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  expandButton: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  expandButtonPlaceholder: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+  },
+  expandIcon: {
+    fontSize: 12,
+    fontFamily: 'TT Tricks Trial Bold',
+    color: '#1a1a1a',
+  },
   tagName: {
     fontSize: 16,
     fontFamily: 'TT Tricks Trial Regular',
