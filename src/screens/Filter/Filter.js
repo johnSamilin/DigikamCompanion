@@ -3,6 +3,8 @@ import {
   View,
   ScrollView,
   Pressable,
+  TextInput,
+  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
 import { SafeScreen } from '@/components/template';
@@ -12,6 +14,7 @@ import { CommonActions } from '@react-navigation/native';
 import { Album, TagTree, Button } from '@/components/molecules';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PagerView from 'react-native-pager-view';
+import { fuzzyScore } from '@/utils/fuzzy';
 import { styles } from './styles';
 
 function Filter({ navigation }) {
@@ -112,6 +115,58 @@ function Filter({ navigation }) {
     return list;
   }, [store.tagTree]);
 
+  const [tagSearch, setTagSearch] = useState('');
+
+  // Fuzzy-filter the tag tree. A branch is kept if the tag itself matches OR
+  // any of its descendants match. Matching branches are auto-expanded and the
+  // best fuzzy score of the subtree is used to rank the visible roots.
+  const { filteredTags, searchExpandedTags } = useMemo(() => {
+    const query = tagSearch.trim();
+    if (!query) {
+      return { filteredTags: rootTags, searchExpandedTags: null };
+    }
+
+    const expanded = new Set();
+
+    // Returns { tag, score } for a pruned subtree, or null if nothing matched.
+    const prune = (tag) => {
+      const selfScore = fuzzyScore(query, tag.name);
+      const prunedChildren = (tag.children || [])
+        .map(prune)
+        .filter(Boolean)
+        .sort((a, b) => b.score - a.score);
+
+      const childScore = prunedChildren.length
+        ? Math.max(...prunedChildren.map(c => c.score))
+        : -1;
+
+      if (selfScore < 0 && childScore < 0) {
+        return null;
+      }
+
+      // Keep the branch expanded so matches deeper in the tree are visible.
+      if (prunedChildren.length > 0) {
+        expanded.add(tag.id);
+      }
+
+      return {
+        score: Math.max(selfScore, childScore),
+        tag: { ...tag, children: prunedChildren.map(c => c.tag) },
+      };
+    };
+
+    const matched = rootTags
+      .map(prune)
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
+      .map(entry => entry.tag);
+
+    return { filteredTags: matched, searchExpandedTags: expanded };
+  }, [tagSearch, rootTags]);
+
+  // When searching, expand matched branches; otherwise use the default state.
+  const effectiveExpandedTags = searchExpandedTags || expandedTags;
+
   const search = useCallback(() => {
     store.selectPhotos({
       albumIds: [...store.activeFilters.albumIds],
@@ -197,19 +252,44 @@ function Filter({ navigation }) {
           initialPage={0}
           onPageSelected={onPageSelected}
         >
-          <ScrollView key="1" style={{ width }}>
-            {rootTags.map(tag => (
-              <TagTree
-                key={tag.id}
-                tag={tag}
-                level={0}
-                isSelected={store.activeFilters.tagIds.has(tag.id)}
-                onChangeState={toggleTag}
-                expandedTags={expandedTags}
-                onToggleExpansion={toggleTagExpansion}
+          <View key="1" style={{ width, flex: 1 }}>
+            <View style={styles.searchWrapper}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search..."
+                placeholderTextColor="#888888"
+                value={tagSearch}
+                onChangeText={setTagSearch}
+                autoCorrect={false}
+                autoCapitalize="none"
               />
-            ))}
-          </ScrollView>
+              {tagSearch.length > 0 && (
+                <TouchableOpacity
+                  style={styles.searchClear}
+                  onPress={() => setTagSearch('')}
+                >
+                  <Text style={styles.searchClearText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <ScrollView style={{ flex: 1 }}>
+              {filteredTags.length > 0 ? (
+                filteredTags.map(tag => (
+                  <TagTree
+                    key={tag.id}
+                    tag={tag}
+                    level={0}
+                    isSelected={store.activeFilters.tagIds.has(tag.id)}
+                    onChangeState={toggleTag}
+                    expandedTags={effectiveExpandedTags}
+                    onToggleExpansion={toggleTagExpansion}
+                  />
+                ))
+              ) : (
+                <Text style={styles.emptyResult}>Nothing</Text>
+              )}
+            </ScrollView>
+          </View>
 
           <ScrollView key="2" style={{ width }}>
             {albums.map(album => (
