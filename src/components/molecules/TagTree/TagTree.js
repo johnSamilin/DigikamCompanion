@@ -1,49 +1,28 @@
 import React, { useCallback } from 'react';
-import { View, Text, TouchableOpacity, useState, useEffect } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { styles } from './styles';
 import { useStore } from '@/store';
 import { observer } from 'mobx-react-lite';
 
-export const TagTree = observer(({ 
-  tag, 
-  level = 0, 
-  isSelected, 
+export const TagTree = observer(({
+  tag,
+  level = 0,
+  isSelected,
   onChangeState,
   expandedTags = new Set(),
-  onToggleExpansion 
+  onToggleExpansion,
 }) => {
   const store = useStore();
-  
-  // Check if this tag has descendants beyond immediate children
-  const hasDeepDescendants = useCallback(() => {
-    const checkDeepChildren = (currentTag) => {
-      if (!currentTag.children || currentTag.children.length === 0) {
-        return false;
-      }
-      // If any child has children, then we have deep descendants
-      return currentTag.children.some(child => 
-        (child.children && child.children.length > 0) || checkDeepChildren(child)
-      );
-    };
-    return checkDeepChildren(tag);
-  }, [tag]);
 
-  // Set default collapsed state for branches with deep descendants
-  useEffect(() => {
-    if (tag.children && tag.children.length > 0 && onToggleExpansion) {
-      // Collapse by default if this branch has descendants beyond immediate children
-      if (!expandedTags.has(tag.id) && !hasDeepDescendants()) {
-        onToggleExpansion(tag.id, true); // Expand simple parent-child relationships
-      }
-    }
-  }, [tag.id, tag.children, hasDeepDescendants, expandedTags, onToggleExpansion]);
-  
   const areAllChildrenSelected = useCallback((currentTag) => {
     if (!currentTag.children || currentTag.children.length === 0) {
       return store.activeFilters.tagIds.has(currentTag.id);
     }
     return currentTag.children.every(child => areAllChildrenSelected(child));
   }, [store.activeFilters.tagIds]);
+
+  const hasChildren = tag.children && tag.children.length > 0;
+  const isExpanded = expandedTags.has(tag.id);
 
   const toggleSelection = useCallback(() => {
     onChangeState(!isSelected, tag.id);
@@ -56,8 +35,6 @@ export const TagTree = observer(({
   }, [tag.id, isExpanded, onToggleExpansion]);
 
   const isCurrentSelected = isSelected || areAllChildrenSelected(tag);
-  const hasChildren = tag.children && tag.children.length > 0;
-  const isExpanded = expandedTags.has(tag.id);
 
   return (
     <View>

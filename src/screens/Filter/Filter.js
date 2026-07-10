@@ -10,17 +10,89 @@ import { observer } from 'mobx-react-lite';
 import { useStore } from '@/store';
 import { CommonActions } from '@react-navigation/native';
 import { Album, TagTree, Button } from '@/components/molecules';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PagerView from 'react-native-pager-view';
 import { styles } from './styles';
 
 function Filter({ navigation }) {
   const store = useStore();
   const [activeTab, setActiveTab] = useState(0);
-  const [expandedTags, setExpandedTags] = useState(new Set());
-  const [expandedAlbums, setExpandedAlbums] = useState(new Set());
   const pagerRef = useRef(null);
   const { width } = useWindowDimensions();
+
+  // Depth of descendants below a tag: leaf = 0, children only = 1,
+  // grandchildren = 2, and so on.
+  const getDescendantDepth = useCallback((tag) => {
+    if (!tag.children || tag.children.length === 0) {
+      return 0;
+    }
+    return 1 + Math.max(...tag.children.map(getDescendantDepth));
+  }, []);
+
+  // By default expand every tag that has children, EXCEPT branches whose
+  // subtree is deeper than 2 levels of descendants — those start collapsed.
+  const defaultExpandedTags = useMemo(() => {
+    const expanded = new Set();
+    const walk = (tag) => {
+      const hasChildren = tag.children && tag.children.length > 0;
+      if (hasChildren && getDescendantDepth(tag) <= 2) {
+        expanded.add(tag.id);
+      }
+      if (hasChildren) {
+        tag.children.forEach(walk);
+      }
+    };
+    store.tagTree.forEach(walk);
+    return expanded;
+  }, [store.tagTree, getDescendantDepth]);
+
+  const [expandedTags, setExpandedTags] = useState(defaultExpandedTags);
+
+  // Re-apply defaults whenever the computed default set changes
+  // (e.g. tags finished loading from the database).
+  useEffect(() => {
+    setExpandedTags(defaultExpandedTags);
+  }, [defaultExpandedTags]);
+
+  // By default expand every album that has children, EXCEPT branches whose
+  // subtree is deeper than 2 levels of descendants — those start collapsed.
+  // Album hierarchy is encoded in relativePath (e.g. "/2024/01").
+  const defaultExpandedAlbums = useMemo(() => {
+    const albumList = Array.from(store.albums.values());
+
+    // Depth of descendants below an album path: no children = 0,
+    // direct children only = 1, grandchildren = 2, and so on.
+    const getAlbumDepth = (relativePath) => {
+      const ownSegments = relativePath.split('/').length;
+      let maxDepth = 0;
+      albumList.forEach(album => {
+        if (album.relativePath.startsWith(relativePath + '/')) {
+          const depth = album.relativePath.split('/').length - ownSegments;
+          if (depth > maxDepth) {
+            maxDepth = depth;
+          }
+        }
+      });
+      return maxDepth;
+    };
+
+    const expanded = new Set();
+    albumList.forEach(album => {
+      const depth = getAlbumDepth(album.relativePath);
+      if (depth > 0 && depth <= 2) {
+        expanded.add(album.id);
+      }
+    });
+    return expanded;
+  }, [store.albums]);
+
+  const [expandedAlbums, setExpandedAlbums] = useState(defaultExpandedAlbums);
+
+  // Re-apply defaults whenever the computed default set changes
+  // (e.g. albums finished loading from the database).
+  useEffect(() => {
+    setExpandedAlbums(defaultExpandedAlbums);
+  }, [defaultExpandedAlbums]);
 
   const albums = useMemo(() => {
     // Get only root level albums (those without parent paths)
