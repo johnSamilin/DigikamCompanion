@@ -116,9 +116,9 @@ export class RootStore {
             });
             Promise.all([
               this.readAlbums(),
-              this.readTags(),
-              this.readTagsTree(),
-              this.readImageTags(),
+              this.readTags().then(() =>
+                Promise.all([this.readTagsTree(), this.readImageTags()]),
+              ),
             ]).then(() => {
               this.addLog('Database initialized successfully');
               resolve();
@@ -241,7 +241,7 @@ export class RootStore {
 
       this.db.transaction(tx => {
         tx.executeSql(
-          'SELECT id, name from Tags where id > 25',
+          'SELECT id, pid, name from Tags where id != 1 and (pid is null or pid != 1)',
           [],
           (t, res) => {
             const tags = new Map();
@@ -271,46 +271,34 @@ export class RootStore {
         return;
       }
 
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT id, pid from TagsTree',
-          [],
-          (t, res) => {
-            const tree = new Map();
-            const processedTags = new Set();
+      const tree = new Map();
+      const processedTags = new Set();
 
-            // First pass: Build parent-child relationships
-            for (let index = 0; index < res.rows.length; index++) {
-              const { id, pid } = res.rows.item(index);
-              if (this.tags.has(id)) {
-                if (pid > 0 && this.tags.has(pid)) {
-                  const parent = this.tags.get(pid);
-                  const child = this.tags.get(id);
-                  parent.children.push(child);
-                  processedTags.add(id);
-                }
-              }
-            }
 
-            // Second pass: Add remaining tags to root level
-            this.tags.forEach((tag, id) => {
-              if (!processedTags.has(id)) {
-                tree.set(id, tag);
-              }
-            });
-
-            this.addLog('READ TAGS TREE');
-            runInAction(() => {
-              this.tagTree = tree;
-            });
-            resolve();
-          },
-          (_, er) => {
-            this.addLog(`SELECT TAGS TREE ERR: ${er.message}`);
-            reject(er);
-          },
-        );
+      this.tags.forEach(tag => {
+        tag.children = [];
       });
+
+      this.tags.forEach((tag, id) => {
+        const pid = tag.pid;
+        if (pid && pid > 0 && this.tags.has(pid)) {
+          const parent = this.tags.get(pid);
+          parent.children.push(tag);
+          processedTags.add(id);
+        }
+      });
+
+      this.tags.forEach((tag, id) => {
+        if (!processedTags.has(id)) {
+          tree.set(id, tag);
+        }
+      });
+
+      this.addLog('READ TAGS TREE');
+      runInAction(() => {
+        this.tagTree = tree;
+      });
+      resolve();
     });
   };
 
@@ -373,7 +361,7 @@ export class RootStore {
 
     const sql = `select id, album, name from Images where ${
       constraints.length > 0 ? constraints.join(' and ') : '1'
-    } order by name desc`;
+    } order by name collate nocase desc`;
     this.addLog(sql);
 
     return new Promise((resolve, reject) => {
@@ -936,42 +924,30 @@ export class RootStore {
           [],
           (_, res) => {
             const nextId = (res.rows.item(0).maxId || 25) + 1;
-            
-            // Insert the new tag
+            const pid = parentId || 0;
+
             tx.executeSql(
-              'INSERT INTO Tags (id, name) VALUES (?, ?)',
-              [nextId, name],
+              'INSERT INTO Tags (id, pid, name) VALUES (?, ?, ?)',
+              [nextId, pid, name],
               (_, tagRes) => {
-                // Add to TagsTree
-                const pid = parentId || 0;
-                tx.executeSql(
-                  'INSERT INTO TagsTree (id, pid) VALUES (?, ?)',
-                  [nextId, pid],
-                  (_, treeRes) => {
-                    // Update local state
-                    const newTag = { id: nextId, name, children: [] };
-                    runInAction(() => {
-                      this.tags.set(nextId, newTag);
-                      
-                      if (parentId && this.tags.has(parentId)) {
-                        // Add to parent's children
-                        const parent = this.tags.get(parentId);
-                        parent.children.push(newTag);
-                      } else {
-                        // Add to root level
-                        this.tagTree.set(nextId, newTag);
-                      }
-                    });
-                    
-                    this.markDatabaseChanged();
-                    this.addLog(`Created tag: ${name} (ID: ${nextId})`);
-                    resolve(newTag);
-                  },
-                  (_, er) => {
-                    this.addLog(`CREATE TAG TREE ERR: ${er.message}`);
-                    reject(er);
+                // Update local state
+                const newTag = { id: nextId, pid, name, children: [] };
+                runInAction(() => {
+                  this.tags.set(nextId, newTag);
+
+                  if (parentId && this.tags.has(parentId)) {
+                    // Add to parent's children
+                    const parent = this.tags.get(parentId);
+                    parent.children.push(newTag);
+                  } else {
+                    // Add to root level
+                    this.tagTree.set(nextId, newTag);
                   }
-                );
+                });
+
+                this.markDatabaseChanged();
+                this.addLog(`Created tag: ${name} (ID: ${nextId})`);
+                resolve(newTag);
               },
               (_, er) => {
                 this.addLog(`CREATE TAG ERR: ${er.message}`);
