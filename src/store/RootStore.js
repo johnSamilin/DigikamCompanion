@@ -1,13 +1,19 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { Dimensions, NativeModules, ToastAndroid, AppState } from 'react-native';
 import {
-  copyFile,
-  DocumentDirectoryPath,
-  readDir,
-  stat,
-  moveFile,
-  mkdir,
-  exists,
+	Dimensions,
+	NativeModules,
+	ToastAndroid,
+	AppState,
+} from 'react-native';
+import {
+	copyFile,
+	DocumentDirectoryPath,
+	readDir,
+	stat,
+	moveFile,
+	mkdir,
+	exists,
+	unlink,
 } from 'react-native-fs';
 import { MMKV } from 'react-native-mmkv';
 import SQLite from 'react-native-sqlite-storage';
@@ -19,1226 +25,1412 @@ const localDbPath = `${DocumentDirectoryPath}/${originalDbName}`;
 const BATCH_SIZE = 50;
 
 export class RootStore {
-  rootFolder = null;
-  isReady = false;
-  db = null;
-  albums = new Map();
-  tags = new Map();
-  tagTree = new Map();
-  imagetags = new Map();
-  images = [];
-  userSelectedImages = new Set();
-  isPermissionDenied = true;
-  log = [];
-  activeFilters = {
-    albumIds: new Set(),
-    tagIds: new Set(),
-  };
-  orientaion = 'P';
-  fileUriPrefix = `file://`;
-  wallpaperTags = new Set();
-  wallpaperType = 'both'; // 'home', 'lock', or 'both'
-  lastWallpaperUpdate = null;
-  hasUnsavedChanges = false;
-  photoSortStats = null;
-  isSortingPhotos = false;
+	rootFolder = null;
 
-  get isFilterApplied() {
-    return (
-      this.activeFilters.albumIds.size > 0 || this.activeFilters.tagIds.size > 0
-    );
-  }
+	isReady = false;
 
-  get normalizedRootPath() {
-    if (!this.rootFolder) return null;
+	db = null;
 
-    let path = decodeURIComponent(this.rootFolder);
-    path = path.replace(/^(content|file):\/\//, '');
-    path = path.replace(/^\/+/, '');
-    
-    if (path.includes(':')) {
-      path = path.substring(path.indexOf(':') + 1);
-    }
-    
-    return path.replace(/\/+$/, '');
-  }
+	albums = new Map();
 
-  get isDatabaseReady() {
-    return this.db !== null && this.isReady;
-  }
+	tags = new Map();
 
-  constructor() {
-    makeAutoObservable(this);
-    this.rootFolder = mmkv.getString('rootfolder');
-    this.wallpaperTags = new Set(JSON.parse(mmkv.getString('wallpaperTags') || '[]'));
-    this.wallpaperType = mmkv.getString('wallpaperType') || 'both';
-    this.lastWallpaperUpdate = mmkv.getString('lastWallpaperUpdate');
-    
-    if (this.rootFolder) {
-      this.getDBConnection().catch(error => {
-        this.addLog(`Failed to initialize database: ${error.message}`);
-      });
-    }
-    
-    Dimensions.addEventListener('change', ({ window: { width, height } }) => {
-      runInAction(() => {
-        this.orientaion = width < height ? 'P' : 'L';
-      });
-    });
+	tagTree = new Map();
 
-    // Listen for app state changes to sync database when app goes to background
-    AppState.addEventListener('change', this.handleAppStateChange);
-  }
+	imagetags = new Map();
 
-  handleAppStateChange = (nextAppState) => {
-    if (nextAppState === 'background' || nextAppState === 'inactive') {
-      this.syncDatabaseToOriginal();
-    }
-  };
+	images = [];
 
-  getDBConnection = async () => {
-    try {
-      await this.copyDBToCache();
-      runInAction(() => {
-        this.isPermissionDenied = false;
-      });
+	userSelectedImages = new Set();
 
-      return new Promise((resolve, reject) => {
-        SQLite.openDatabase(
-          {
-            name: dbName,
-            createFromLocation: originalDbName,
-          },
-          database => {
-            runInAction(() => {
-              this.db = database;
-              this.isReady = true;
-            });
-            Promise.all([
-              this.readAlbums(),
-              this.readTags().then(() =>
-                Promise.all([this.readTagsTree(), this.readImageTags()]),
-              ),
-            ]).then(() => {
-              this.addLog('Database initialized successfully');
-              resolve();
-            }).catch(reject);
-          },
-          error => {
-            this.addLog(`Database connection failed: ${error.message}`);
-            reject(error);
-          },
-        );
-      });
-    } catch (er) {
-      this.addLog(`Database setup error: ${er.message}`);
-      throw er;
-    }
-  };
+	isPermissionDenied = true;
 
-  copyDBToCache = () => {
-    const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
-    return copyFile(originalDbPath, localDbPath).then(() => {
-      this.addLog(`DB File copied to ${localDbPath}`);
-    });
-  };
+	log = [];
 
-  syncDatabaseToOriginal = async () => {
-    if (!this.hasUnsavedChanges || !this.isDatabaseReady || !this.normalizedRootPath) {
-      return;
-    }
+	activeFilters = {
+		albumIds: new Set(),
+		tagIds: new Set(),
+	};
 
-    try {
-      const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
-      
-      // Close the database connection temporarily
-      if (this.db) {
-        await new Promise((resolve, reject) => {
-          this.db.close(resolve, reject);
-        });
-      }
+	orientaion = 'P';
 
-      // Copy the modified database back to the original location
-      await copyFile(localDbPath, originalDbPath);
-      
-      // Reopen the database
-      await new Promise((resolve, reject) => {
-        SQLite.openDatabase(
-          {
-            name: dbName,
-            createFromLocation: originalDbName,
-          },
-          database => {
-            runInAction(() => {
-              this.db = database;
-              this.hasUnsavedChanges = false;
-            });
-            this.addLog('Database synced back to original location');
-            resolve();
-          },
-          reject,
-        );
-      });
+	fileUriPrefix = 'file://';
 
-    } catch (error) {
-      this.addLog(`Failed to sync database: ${error.message}`);
-      ToastAndroid.show('Failed to save changes to database', ToastAndroid.LONG);
-    }
-  };
+	wallpaperTags = new Set();
 
-  markDatabaseChanged = () => {
-    runInAction(() => {
-      this.hasUnsavedChanges = true;
-    });
-  };
+	wallpaperType = 'both'; // 'home', 'lock', or 'both'
 
-  setRootFolder = value => {
-    this.rootFolder = value;
-    mmkv.set('rootfolder', value);
-    this.getDBConnection().catch(error => {
-      this.addLog(`Failed to initialize database after folder selection: ${error.message}`);
-    });
-  };
+	lastWallpaperUpdate = null;
 
-  readAlbums = () => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+	hasUnsavedChanges = false;
 
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT id, albumRoot, relativePath from Albums order by relativePath DESC',
-          [],
-          (t, res) => {
-            const fldrs = new Map();
-            for (let index = 0; index < res.rows.length; index++) {
-              const folder = res.rows.item(index);
-              fldrs.set(folder.id, folder);
-            }
-            this.addLog('READ ALBUMS');
-            runInAction(() => {
-              this.albums = fldrs;
-            });
-            resolve();
-          },
-          (_, er) => {
-            this.addLog(`SELECT ALBUMS ERR: ${er.message}`);
-            reject(er);
-          },
-        );
-      });
-    });
-  };
+	photoSortStats = null;
 
-  readTags = () => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+	isSortingPhotos = false;
 
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT id, pid, name from Tags where id != 1 and (pid is null or pid != 1)',
-          [],
-          (t, res) => {
-            const tags = new Map();
-            for (let index = 0; index < res.rows.length; index++) {
-              const tag = res.rows.item(index);
-              tags.set(tag.id, { ...tag, children: [] });
-            }
-            this.addLog('READ TAGS');
-            runInAction(() => {
-              this.tags = tags;
-            });
-            resolve();
-          },
-          (_, er) => {
-            this.addLog(`SELECT TAGS ERR: ${er.message}`);
-            reject(er);
-          },
-        );
-      });
-    });
-  };
+	get isFilterApplied() {
+		return (
+			this.activeFilters.albumIds.size > 0 || this.activeFilters.tagIds.size > 0
+		);
+	}
 
-  readTagsTree = () => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+	get normalizedRootPath() {
+		if (!this.rootFolder) return null;
 
-      const tree = new Map();
-      const processedTags = new Set();
+		let path = decodeURIComponent(this.rootFolder);
+		path = path.replace(/^(content|file):\/\//, '');
+		path = path.replace(/^\/+/, '');
 
+		if (path.includes(':')) {
+			path = path.substring(path.indexOf(':') + 1);
+		}
 
-      this.tags.forEach(tag => {
-        tag.children = [];
-      });
+		return path.replace(/\/+$/, '');
+	}
 
-      this.tags.forEach((tag, id) => {
-        const pid = tag.pid;
-        if (pid && pid > 0 && this.tags.has(pid)) {
-          const parent = this.tags.get(pid);
-          parent.children.push(tag);
-          processedTags.add(id);
-        }
-      });
+	get isDatabaseReady() {
+		return this.db !== null && this.isReady;
+	}
 
-      this.tags.forEach((tag, id) => {
-        if (!processedTags.has(id)) {
-          tree.set(id, tag);
-        }
-      });
+	constructor() {
+		makeAutoObservable(this);
+		this.rootFolder = mmkv.getString('rootfolder');
+		this.wallpaperTags = new Set(
+			JSON.parse(mmkv.getString('wallpaperTags') || '[]'),
+		);
+		this.wallpaperType = mmkv.getString('wallpaperType') || 'both';
+		this.lastWallpaperUpdate = mmkv.getString('lastWallpaperUpdate');
 
-      this.addLog('READ TAGS TREE');
-      runInAction(() => {
-        this.tagTree = tree;
-      });
-      resolve();
-    });
-  };
+		if (this.rootFolder) {
+			this.getDBConnection().catch(error => {
+				this.addLog(`Failed to initialize database: ${error.message}`);
+			});
+		}
 
-  readImageTags = () => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+		Dimensions.addEventListener('change', ({ window: { width, height } }) => {
+			runInAction(() => {
+				this.orientaion = width < height ? 'P' : 'L';
+			});
+		});
 
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'SELECT imageid, tagid from ImageTags',
-          [],
-          (t, res) => {
-            const imagetags = new Map();
-            for (let index = 0; index < res.rows.length; index++) {
-              const { imageid, tagid } = res.rows.item(index);
-              const tags = imagetags.get(imageid) || [];
-              const tag = this.tags.get(tagid);
-              if (tag) {
-                tags.push({ tagid, tagname: tag.name });
-              }
-              imagetags.set(imageid, tags);
-            }
-            this.addLog('READ IMAGE TAGS');
-            runInAction(() => {
-              this.imagetags = imagetags;
-            });
-            resolve();
-          },
-          (_, er) => {
-            this.addLog(`SELECT Image TAGS ERR: ${er.message}`);
-            reject(er);
-          },
-        );
-      });
-    });
-  };
+		// Listen for app state changes to sync database when app goes to background
+		AppState.addEventListener('change', this.handleAppStateChange);
+	}
 
-  selectPhotos = async (activeFilters = { albumIds: [], tagIds: [] }) => {
-    if (!this.isDatabaseReady) {
-      this.addLog('Cannot select photos: Database not ready');
-      return Promise.reject(new Error('Database not ready'));
-    }
+	handleAppStateChange = async nextAppState => {
+		if (nextAppState === 'background' || nextAppState === 'inactive') {
+			// Persist changes and force-clear the cache so that returning to the
+			// app re-seeds from the current copy of the original database.
+			await this.syncDatabaseToOriginal();
+			await this.clearDBCache();
+			runInAction(() => {
+				this.db = null;
+				this.isReady = false;
+			});
+		} else if (nextAppState === 'active') {
+			// Re-establish the database connection with a fresh cache copy.
+			if (this.rootFolder && !this.isDatabaseReady) {
+				this.getDBConnection().catch(error => {
+					this.addLog(`Failed to reinitialize database: ${error.message}`);
+				});
+			}
+		}
+	};
 
-    this.dropUserSelection();
-    const constraints = ['album is not null'];
+	getDBConnection = async () => {
+		try {
+			await this.copyDBToCache();
+			runInAction(() => {
+				this.isPermissionDenied = false;
+			});
 
-    if (activeFilters.albumIds.length) {
-      constraints.push(`album in (${activeFilters.albumIds.join(', ')})`);
-    }
-    if (activeFilters.tagIds.length) {
-      constraints.push(
-        `id in (select imageid from ImageTags where tagid in (${activeFilters.tagIds.join(
-          ', ',
-        )}))`,
-      );
-    }
+			return new Promise((resolve, reject) => {
+				SQLite.openDatabase(
+					{
+						name: dbName,
+						createFromLocation: originalDbName,
+					},
+					database => {
+						runInAction(() => {
+							this.db = database;
+							this.isReady = true;
+						});
+						Promise.all([
+							this.readAlbums(),
+							this.readTags().then(() =>
+								Promise.all([this.readTagsTree(), this.readImageTags()]),
+							),
+						])
+							.then(() => {
+								this.addLog('Database initialized successfully');
+								resolve();
+							})
+							.catch(reject);
+					},
+					error => {
+						this.addLog(`Database connection failed: ${error.message}`);
+						reject(error);
+					},
+				);
+			});
+		} catch (er) {
+			this.addLog(`Database setup error: ${er.message}`);
+			throw er;
+		}
+	};
 
-    const sql = `select id, album, name from Images where ${
-      constraints.length > 0 ? constraints.join(' and ') : '1'
-    } order by name collate nocase desc`;
-    this.addLog(sql);
+	copyDBToCache = async () => {
+		const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
+		// Clear any stale cache first so SQLite always seeds from the fresh copy
+		await this.clearDBCache();
+		await copyFile(originalDbPath, localDbPath);
+		this.addLog(`DB File copied to ${localDbPath}`);
+	};
 
-    return new Promise((resolve, reject) => {
-      this.db.transaction(tx => {
-        tx.executeSql(
-          sql,
-          [],
-          (t, res) => {
-            const images = [];
-            try {
-              for (let index = 0; index < res.rows.length; index += BATCH_SIZE) {
-                const batch = [];
-                for (
-                  let j = index;
-                  j < Math.min(index + BATCH_SIZE, res.rows.length);
-                  j++
-                ) {
-                  const image = res.rows.item(j);
-                  const album = this.albums.get(image.album);
-                  if (album) {
-                    image.uri = `${this.fileUriPrefix}/storage/emulated/0/${this.normalizedRootPath}${album.relativePath}/${image.name}`;
-                    batch.push(image);
-                  }
-                }
-                images.push(...batch);
-              }
-            } catch (er) {
-              this.addLog(`Error when constructing image paths: ${er.message}`);
-            }
-            this.addLog(`${images.length} IMAGES`);
-            runInAction(() => {
-              this.images = images;
-            });
-            resolve();
-          },
-          (_, er) => {
-            this.addLog(`SELECT IMAGES ERR: ${er.message}`);
-            reject(er);
-            ToastAndroid.show(
-              'Problem getting data. Check system messages',
-              ToastAndroid.LONG,
-            );
-          },
-        );
-      });
-    });
-  };
+	// Force clear the cached database (both the local seed copy and the
+	// internal SQLite database) so a fresh copy is used on next open.
+	clearDBCache = async () => {
+		// Make sure the connection is closed before deleting so the underlying
+		// file is not locked.
+		if (this.db) {
+			try {
+				await new Promise((resolve, reject) => {
+					this.db.close(resolve, reject);
+				});
+			} catch (error) {
+				this.addLog(
+					`Could not close DB before clearing cache: ${
+						error?.message || error
+					}`,
+				);
+			}
+			runInAction(() => {
+				this.db = null;
+				this.isReady = false;
+			});
+		}
 
-  addLog(text) {
-    const d = new Date();
-    const timestamp = `${d.getFullYear()}.${d.getMonth()}.${d.getDate()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
-    runInAction(() => {
-      this.log.push(`${timestamp} - ${text}`);
-      if (this.log.length > 1000) {
-        this.log = this.log.slice(-1000);
-      }
-    });
-  }
+		// Delete the internal SQLite database created via createFromLocation.
+		// Without this, SQLite reuses the previously seeded copy and ignores
+		// any newer version of the original database.
+		try {
+			await new Promise((resolve, reject) => {
+				SQLite.deleteDatabase({ name: dbName }, resolve, reject);
+			});
+			this.addLog('Internal SQLite database cache cleared');
+		} catch (error) {
+			// Missing database is not an error we need to surface
+			this.addLog(`Could not clear SQLite cache: ${error?.message || error}`);
+		}
 
-  addAlbumToFilters = id => {
-    runInAction(() => {
-      this.activeFilters.albumIds.add(id);
-      // Add all child albums
-      this.albums.forEach(album => {
-        if (album.relativePath.startsWith(this.albums.get(id).relativePath + '/')) {
-          this.activeFilters.albumIds.add(album.id);
-        }
-      });
-    });
-  };
+		// Delete the local seed copy as well
+		try {
+			if (await exists(localDbPath)) {
+				await unlink(localDbPath);
+				this.addLog(`Removed cached DB copy at ${localDbPath}`);
+			}
+		} catch (error) {
+			this.addLog(
+				`Could not remove cached DB copy: ${error?.message || error}`,
+			);
+		}
+	};
 
-  removeAlbumFromFilters = id => {
-    runInAction(() => {
-      this.activeFilters.albumIds.delete(id);
-      // Remove all child albums
-      this.albums.forEach(album => {
-        if (album.relativePath.startsWith(this.albums.get(id).relativePath + '/')) {
-          this.activeFilters.albumIds.delete(album.id);
-        }
-      });
-    });
-  };
+	syncDatabaseToOriginal = async () => {
+		if (
+			!this.hasUnsavedChanges ||
+			!this.isDatabaseReady ||
+			!this.normalizedRootPath
+		) {
+			return;
+		}
 
-  addTagToFilters = id => {
-    runInAction(() => {
-      this.activeFilters.tagIds.add(id);
-      // Add all child tags recursively
-      const addChildTags = (tag) => {
-        if (tag.children) {
-          tag.children.forEach(child => {
-            this.activeFilters.tagIds.add(child.id);
-            addChildTags(child);
-          });
-        }
-      };
-      const tag = this.tags.get(id);
-      if (tag) {
-        addChildTags(tag);
-      }
-    });
-  };
+		try {
+			const originalDbPath = `/storage/emulated/0/${this.normalizedRootPath}/${dbName}.db`;
 
-  removeTagFromFilters = id => {
-    runInAction(() => {
-      this.activeFilters.tagIds.delete(id);
-      // Remove all child tags recursively
-      const removeChildTags = (tag) => {
-        if (tag.children) {
-          tag.children.forEach(child => {
-            this.activeFilters.tagIds.delete(child.id);
-            removeChildTags(child);
-          });
-        }
-      };
-      const tag = this.tags.get(id);
-      if (tag) {
-        removeChildTags(tag);
-      }
-    });
-  };
+			// Close the database connection temporarily
+			if (this.db) {
+				await new Promise((resolve, reject) => {
+					this.db.close(resolve, reject);
+				});
+			}
 
-  resetFilters = () => {
-    runInAction(() => {
-      this.activeFilters.albumIds.clear();
-      this.activeFilters.tagIds.clear();
-    });
-  };
+			// Copy the modified database back to the original location
+			await copyFile(localDbPath, originalDbPath);
 
-  // Database helper methods for photo sorting
-  findOrCreateAlbum = (relativePath) => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+			// Reopen the database
+			await new Promise((resolve, reject) => {
+				SQLite.openDatabase(
+					{
+						name: dbName,
+						createFromLocation: originalDbName,
+					},
+					database => {
+						runInAction(() => {
+							this.db = database;
+							this.hasUnsavedChanges = false;
+						});
+						this.addLog('Database synced back to original location');
+						resolve();
+					},
+					reject,
+				);
+			});
+		} catch (error) {
+			this.addLog(`Failed to sync database: ${error.message}`);
+			ToastAndroid.show(
+				'Failed to save changes to database',
+				ToastAndroid.LONG,
+			);
+		}
+	};
 
-      this.addLog(`Finding or creating album: ${relativePath}`);
+	markDatabaseChanged = () => {
+		runInAction(() => {
+			this.hasUnsavedChanges = true;
+		});
+	};
 
-      // First check if album already exists
-      const existingAlbum = Array.from(this.albums.values()).find(
-        album => album.relativePath === relativePath
-      );
+	setRootFolder = value => {
+		this.rootFolder = value;
+		mmkv.set('rootfolder', value);
+		this.getDBConnection().catch(error => {
+			this.addLog(
+				`Failed to initialize database after folder selection: ${error.message}`,
+			);
+		});
+	};
 
-      if (existingAlbum) {
-        this.addLog(`Album already exists: ${relativePath} (ID: ${existingAlbum.id})`);
-        resolve(existingAlbum.id);
-        return;
-      }
+	readAlbums = () => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-      // Create new album with timeout protection
-      const timeoutId = setTimeout(() => {
-        reject(new Error(`Album creation timeout for ${relativePath}`));
-      }, 10000); // 10 second timeout
+			this.db.transaction(tx => {
+				tx.executeSql(
+					'SELECT id, albumRoot, relativePath from Albums order by relativePath DESC',
+					[],
+					(t, res) => {
+						const fldrs = new Map();
+						for (let index = 0; index < res.rows.length; index++) {
+							const folder = res.rows.item(index);
+							fldrs.set(folder.id, folder);
+						}
+						this.addLog('READ ALBUMS');
+						runInAction(() => {
+							this.albums = fldrs;
+						});
+						resolve();
+					},
+					(_, er) => {
+						this.addLog(`SELECT ALBUMS ERR: ${er.message}`);
+						reject(er);
+					},
+				);
+			});
+		});
+	};
 
-      this.db.transaction(tx => {
-        // Get the next available album ID
-        tx.executeSql(
-          'SELECT MAX(id) as maxId FROM Albums',
-          [],
-          (_, res) => {
-            try {
-              const nextId = (res.rows.item(0).maxId || 0) + 1;
-              this.addLog(`Creating album with ID ${nextId}: ${relativePath}`);
-              
-              // Insert the new album (albumRoot is typically 1 for main collection)
-              tx.executeSql(
-                'INSERT INTO Albums (id, albumRoot, relativePath) VALUES (?, ?, ?)',
-                [nextId, 1, relativePath],
-                (_, albumRes) => {
-                  clearTimeout(timeoutId);
-                  // Update local state
-                  const newAlbum = { id: nextId, albumRoot: 1, relativePath };
-                  runInAction(() => {
-                    this.albums.set(nextId, newAlbum);
-                  });
-                  
-                  this.markDatabaseChanged();
-                  this.addLog(`Successfully created album: ${relativePath} (ID: ${nextId})`);
-                  resolve(nextId);
-                },
-                (_, er) => {
-                  clearTimeout(timeoutId);
-                  this.addLog(`CREATE ALBUM ERR: ${er.message}`);
-                  reject(er);
-                }
-              );
-            } catch (error) {
-              clearTimeout(timeoutId);
-              this.addLog(`Error in album creation: ${error.message}`);
-              reject(error);
-            }
-          },
-          (_, er) => {
-            clearTimeout(timeoutId);
-            this.addLog(`GET MAX ALBUM ID ERR: ${er.message}`);
-            reject(er);
-          }
-        );
-      }, (error) => {
-        clearTimeout(timeoutId);
-        this.addLog(`Album creation transaction failed: ${error.message}`);
-        reject(error);
-      });
-    });
-  };
+	readTags = () => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-  addImageToDatabase = (fileName, albumId, fileStats) => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+			this.db.transaction(tx => {
+				tx.executeSql(
+					'SELECT id, pid, name from Tags where id != 1 and (pid is null or pid != 1)',
+					[],
+					(t, res) => {
+						const tags = new Map();
+						for (let index = 0; index < res.rows.length; index++) {
+							const tag = res.rows.item(index);
+							tags.set(tag.id, { ...tag, children: [] });
+						}
+						this.addLog('READ TAGS');
+						runInAction(() => {
+							this.tags = tags;
+						});
+						resolve();
+					},
+					(_, er) => {
+						this.addLog(`SELECT TAGS ERR: ${er.message}`);
+						reject(er);
+					},
+				);
+			});
+		});
+	};
 
-      this.addLog(`Adding image to database: ${fileName} (album: ${albumId})`);
+	readTagsTree = () => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-      // Add timeout protection
-      const timeoutId = setTimeout(() => {
-        reject(new Error(`Image database insertion timeout for ${fileName}`));
-      }, 10000); // 10 second timeout
+			const tree = new Map();
+			const processedTags = new Set();
 
-      this.db.transaction(tx => {
-        // Get the next available image ID
-        tx.executeSql(
-          'SELECT MAX(id) as maxId FROM Images',
-          [],
-          (_, res) => {
-            try {
-              const nextId = (res.rows.item(0).maxId || 0) + 1;
-              
-              // Prepare image metadata
-              const modificationDate = new Date(fileStats.mtime);
-              const creationDate = new Date(fileStats.ctime || fileStats.mtime);
-              
-              this.addLog(`Creating image record with ID ${nextId}: ${fileName}`);
-              
-              // Insert the new image with all required fields
-              tx.executeSql(
-                `INSERT INTO Images (
+			this.tags.forEach(tag => {
+				tag.children = [];
+			});
+
+			this.tags.forEach((tag, id) => {
+				const { pid } = tag;
+				if (pid && pid > 0 && this.tags.has(pid)) {
+					const parent = this.tags.get(pid);
+					parent.children.push(tag);
+					processedTags.add(id);
+				}
+			});
+
+			this.tags.forEach((tag, id) => {
+				if (!processedTags.has(id)) {
+					tree.set(id, tag);
+				}
+			});
+
+			this.addLog('READ TAGS TREE');
+			runInAction(() => {
+				this.tagTree = tree;
+			});
+			resolve();
+		});
+	};
+
+	readImageTags = () => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
+
+			this.db.transaction(tx => {
+				tx.executeSql(
+					'SELECT imageid, tagid from ImageTags',
+					[],
+					(t, res) => {
+						const imagetags = new Map();
+						for (let index = 0; index < res.rows.length; index++) {
+							const { imageid, tagid } = res.rows.item(index);
+							const tags = imagetags.get(imageid) || [];
+							const tag = this.tags.get(tagid);
+							if (tag) {
+								tags.push({ tagid, tagname: tag.name });
+							}
+							imagetags.set(imageid, tags);
+						}
+						this.addLog('READ IMAGE TAGS');
+						runInAction(() => {
+							this.imagetags = imagetags;
+						});
+						resolve();
+					},
+					(_, er) => {
+						this.addLog(`SELECT Image TAGS ERR: ${er.message}`);
+						reject(er);
+					},
+				);
+			});
+		});
+	};
+
+	selectPhotos = async (activeFilters = { albumIds: [], tagIds: [] }) => {
+		if (!this.isDatabaseReady) {
+			this.addLog('Cannot select photos: Database not ready');
+			return Promise.reject(new Error('Database not ready'));
+		}
+
+		this.dropUserSelection();
+		const constraints = ['album is not null'];
+
+		if (activeFilters.albumIds.length) {
+			constraints.push(`album in (${activeFilters.albumIds.join(', ')})`);
+		}
+		if (activeFilters.tagIds.length) {
+			constraints.push(
+				`id in (select imageid from ImageTags where tagid in (${activeFilters.tagIds.join(
+					', ',
+				)}))`,
+			);
+		}
+
+		const sql = `select id, album, name from Images where ${
+			constraints.length > 0 ? constraints.join(' and ') : '1'
+		} order by name collate nocase desc`;
+		this.addLog(sql);
+
+		return new Promise((resolve, reject) => {
+			this.db.transaction(tx => {
+				tx.executeSql(
+					sql,
+					[],
+					(t, res) => {
+						const images = [];
+						try {
+							for (
+								let index = 0;
+								index < res.rows.length;
+								index += BATCH_SIZE
+							) {
+								const batch = [];
+								for (
+									let j = index;
+									j < Math.min(index + BATCH_SIZE, res.rows.length);
+									j++
+								) {
+									const image = res.rows.item(j);
+									const album = this.albums.get(image.album);
+									if (album) {
+										image.uri = `${this.fileUriPrefix}/storage/emulated/0/${this.normalizedRootPath}${album.relativePath}/${image.name}`;
+										batch.push(image);
+									}
+								}
+								images.push(...batch);
+							}
+						} catch (er) {
+							this.addLog(`Error when constructing image paths: ${er.message}`);
+						}
+						this.addLog(`${images.length} IMAGES`);
+						runInAction(() => {
+							this.images = images;
+						});
+						resolve();
+					},
+					(_, er) => {
+						this.addLog(`SELECT IMAGES ERR: ${er.message}`);
+						reject(er);
+						ToastAndroid.show(
+							'Problem getting data. Check system messages',
+							ToastAndroid.LONG,
+						);
+					},
+				);
+			});
+		});
+	};
+
+	addLog(text) {
+		const d = new Date();
+		const timestamp = `${d.getFullYear()}.${d.getMonth()}.${d.getDate()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
+		runInAction(() => {
+			this.log.push(`${timestamp} - ${text}`);
+			if (this.log.length > 1000) {
+				this.log = this.log.slice(-1000);
+			}
+		});
+	}
+
+	addAlbumToFilters = id => {
+		runInAction(() => {
+			this.activeFilters.albumIds.add(id);
+			// Add all child albums
+			this.albums.forEach(album => {
+				if (
+					album.relativePath.startsWith(`${this.albums.get(id).relativePath}/`)
+				) {
+					this.activeFilters.albumIds.add(album.id);
+				}
+			});
+		});
+	};
+
+	removeAlbumFromFilters = id => {
+		runInAction(() => {
+			this.activeFilters.albumIds.delete(id);
+			// Remove all child albums
+			this.albums.forEach(album => {
+				if (
+					album.relativePath.startsWith(`${this.albums.get(id).relativePath}/`)
+				) {
+					this.activeFilters.albumIds.delete(album.id);
+				}
+			});
+		});
+	};
+
+	addTagToFilters = id => {
+		runInAction(() => {
+			this.activeFilters.tagIds.add(id);
+			// Add all child tags recursively
+			const addChildTags = tag => {
+				if (tag.children) {
+					tag.children.forEach(child => {
+						this.activeFilters.tagIds.add(child.id);
+						addChildTags(child);
+					});
+				}
+			};
+			const tag = this.tags.get(id);
+			if (tag) {
+				addChildTags(tag);
+			}
+		});
+	};
+
+	removeTagFromFilters = id => {
+		runInAction(() => {
+			this.activeFilters.tagIds.delete(id);
+			// Remove all child tags recursively
+			const removeChildTags = tag => {
+				if (tag.children) {
+					tag.children.forEach(child => {
+						this.activeFilters.tagIds.delete(child.id);
+						removeChildTags(child);
+					});
+				}
+			};
+			const tag = this.tags.get(id);
+			if (tag) {
+				removeChildTags(tag);
+			}
+		});
+	};
+
+	resetFilters = () => {
+		runInAction(() => {
+			this.activeFilters.albumIds.clear();
+			this.activeFilters.tagIds.clear();
+		});
+	};
+
+	// Database helper methods for photo sorting
+	findOrCreateAlbum = relativePath => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
+
+			this.addLog(`Finding or creating album: ${relativePath}`);
+
+			// First check if album already exists
+			const existingAlbum = Array.from(this.albums.values()).find(
+				album => album.relativePath === relativePath,
+			);
+
+			if (existingAlbum) {
+				this.addLog(
+					`Album already exists: ${relativePath} (ID: ${existingAlbum.id})`,
+				);
+				resolve(existingAlbum.id);
+				return;
+			}
+
+			// Create new album with timeout protection
+			const timeoutId = setTimeout(() => {
+				reject(new Error(`Album creation timeout for ${relativePath}`));
+			}, 10000); // 10 second timeout
+
+			this.db.transaction(
+				tx => {
+					// Get the next available album ID
+					tx.executeSql(
+						'SELECT MAX(id) as maxId FROM Albums',
+						[],
+						(_, res) => {
+							try {
+								const nextId = (res.rows.item(0).maxId || 0) + 1;
+								this.addLog(
+									`Creating album with ID ${nextId}: ${relativePath}`,
+								);
+
+								// Insert the new album (albumRoot is typically 1 for main collection)
+								tx.executeSql(
+									'INSERT INTO Albums (id, albumRoot, relativePath) VALUES (?, ?, ?)',
+									[nextId, 1, relativePath],
+									(_, albumRes) => {
+										clearTimeout(timeoutId);
+										// Update local state
+										const newAlbum = { id: nextId, albumRoot: 1, relativePath };
+										runInAction(() => {
+											this.albums.set(nextId, newAlbum);
+										});
+
+										this.markDatabaseChanged();
+										this.addLog(
+											`Successfully created album: ${relativePath} (ID: ${nextId})`,
+										);
+										resolve(nextId);
+									},
+									(_, er) => {
+										clearTimeout(timeoutId);
+										this.addLog(`CREATE ALBUM ERR: ${er.message}`);
+										reject(er);
+									},
+								);
+							} catch (error) {
+								clearTimeout(timeoutId);
+								this.addLog(`Error in album creation: ${error.message}`);
+								reject(error);
+							}
+						},
+						(_, er) => {
+							clearTimeout(timeoutId);
+							this.addLog(`GET MAX ALBUM ID ERR: ${er.message}`);
+							reject(er);
+						},
+					);
+				},
+				error => {
+					clearTimeout(timeoutId);
+					this.addLog(`Album creation transaction failed: ${error.message}`);
+					reject(error);
+				},
+			);
+		});
+	};
+
+	addImageToDatabase = (fileName, albumId, fileStats) => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
+
+			this.addLog(`Adding image to database: ${fileName} (album: ${albumId})`);
+
+			// Add timeout protection
+			const timeoutId = setTimeout(() => {
+				reject(new Error(`Image database insertion timeout for ${fileName}`));
+			}, 10000); // 10 second timeout
+
+			this.db.transaction(
+				tx => {
+					// Get the next available image ID
+					tx.executeSql(
+						'SELECT MAX(id) as maxId FROM Images',
+						[],
+						(_, res) => {
+							try {
+								const nextId = (res.rows.item(0).maxId || 0) + 1;
+
+								// Prepare image metadata
+								const modificationDate = new Date(fileStats.mtime);
+								const creationDate = new Date(
+									fileStats.ctime || fileStats.mtime,
+								);
+
+								this.addLog(
+									`Creating image record with ID ${nextId}: ${fileName}`,
+								);
+
+								// Insert the new image with all required fields
+								tx.executeSql(
+									`INSERT INTO Images (
                   id, name, album, modificationDate, fileSize, uniqueHash,
                   status, category, format, colorDepth, colorModel,
                   creationDate, digitizationDate, orientation, width, height
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                  nextId,
-                  fileName,
-                  albumId,
-                  modificationDate.toISOString(),
-                  fileStats.size,
-                  `${fileName}_${Date.now()}`, // Simple unique hash
-                  1, // status: 1 = visible
-                  1, // category: 1 = image
-                  'JPEG', // format - default to JPEG, could be improved to detect actual format
-                  8, // colorDepth - default to 8 bits
-                  'RGB', // colorModel - default to RGB
-                  creationDate.toISOString(),
-                  modificationDate.toISOString(), // digitizationDate
-                  1, // orientation: 1 = normal
-                  0, // width - will be 0 until image is analyzed
-                  0  // height - will be 0 until image is analyzed
-                ],
-                (_, imageRes) => {
-                  clearTimeout(timeoutId);
-                  this.addLog(`Successfully added image to database: ${fileName} (ID: ${nextId})`);
-                  resolve(nextId);
-                },
-                (_, er) => {
-                  clearTimeout(timeoutId);
-                  this.addLog(`ADD IMAGE ERR: ${er.message}`);
-                  reject(er);
-                }
-              );
-            } catch (error) {
-              clearTimeout(timeoutId);
-              this.addLog(`Error in image database insertion: ${error.message}`);
-              reject(error);
-            }
-          },
-          (_, er) => {
-            clearTimeout(timeoutId);
-            this.addLog(`GET MAX IMAGE ID ERR: ${er.message}`);
-            reject(er);
-          }
-        );
-      }, (error) => {
-        clearTimeout(timeoutId);
-        this.addLog(`Image database transaction failed: ${error.message}`);
-        reject(error);
-      });
-    });
-  };
+									[
+										nextId,
+										fileName,
+										albumId,
+										modificationDate.toISOString(),
+										fileStats.size,
+										`${fileName}_${Date.now()}`, // Simple unique hash
+										1, // status: 1 = visible
+										1, // category: 1 = image
+										'JPEG', // format - default to JPEG, could be improved to detect actual format
+										8, // colorDepth - default to 8 bits
+										'RGB', // colorModel - default to RGB
+										creationDate.toISOString(),
+										modificationDate.toISOString(), // digitizationDate
+										1, // orientation: 1 = normal
+										0, // width - will be 0 until image is analyzed
+										0, // height - will be 0 until image is analyzed
+									],
+									(_, imageRes) => {
+										clearTimeout(timeoutId);
+										this.addLog(
+											`Successfully added image to database: ${fileName} (ID: ${nextId})`,
+										);
+										resolve(nextId);
+									},
+									(_, er) => {
+										clearTimeout(timeoutId);
+										this.addLog(`ADD IMAGE ERR: ${er.message}`);
+										reject(er);
+									},
+								);
+							} catch (error) {
+								clearTimeout(timeoutId);
+								this.addLog(
+									`Error in image database insertion: ${error.message}`,
+								);
+								reject(error);
+							}
+						},
+						(_, er) => {
+							clearTimeout(timeoutId);
+							this.addLog(`GET MAX IMAGE ID ERR: ${er.message}`);
+							reject(er);
+						},
+					);
+				},
+				error => {
+					clearTimeout(timeoutId);
+					this.addLog(`Image database transaction failed: ${error.message}`);
+					reject(error);
+				},
+			);
+		});
+	};
 
-  // Photo sorting methods
-  analyzePhotoSorting = async () => {
-    if (!this.normalizedRootPath) {
-      this.addLog('Cannot analyze photo sorting: No root folder selected');
-      return;
-    }
+	// Photo sorting methods
+	analyzePhotoSorting = async () => {
+		if (!this.normalizedRootPath) {
+			this.addLog('Cannot analyze photo sorting: No root folder selected');
+			return;
+		}
 
-    try {
-      this.addLog('Analyzing DCIM folder for photo sorting...');
-      
-      const dcimPath = '/storage/emulated/0/DCIM';
-      const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
-      
-      // Check if DCIM exists
-      const dcimExists = await exists(dcimPath);
-      if (!dcimExists) {
-        runInAction(() => {
-          this.photoSortStats = {
-            totalPhotos: 0,
-            foldersToCreate: [],
-            error: 'DCIM folder not found'
-          };
-        });
-        return;
-      }
+		try {
+			this.addLog('Analyzing DCIM folder for photo sorting...');
 
-      const photoExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic', '.raw', '.dng'];
-      const photosToMove = [];
-      const foldersToCreate = new Set();
+			const dcimPath = '/storage/emulated/0/DCIM';
+			const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
 
-      // Recursively scan DCIM folder
-      const scanFolder = async (folderPath) => {
-        try {
-          const items = await readDir(folderPath);
-          
-          for (const item of items) {
-            if (item.isDirectory()) {
-              await scanFolder(item.path);
-            } else if (item.isFile()) {
-              const extension = item.name.toLowerCase().substring(item.name.lastIndexOf('.'));
-              if (photoExtensions.includes(extension)) {
-                try {
-                  const fileStats = await stat(item.path);
-                  const modDate = new Date(fileStats.mtime);
-                  const year = modDate.getFullYear();
-                  const month = String(modDate.getMonth() + 1).padStart(2, '0');
-                  
-                  const targetFolder = `${year}/${month}`;
-                  const targetPath = `${rootPath}/${targetFolder}`;
-                  
-                  photosToMove.push({
-                    sourcePath: item.path,
-                    targetPath: `${targetPath}/${item.name}`,
-                    targetFolder,
-                    fileName: item.name,
-                    modDate: modDate.toISOString(),
-                    fileStats,
-                  });
-                  
-                  foldersToCreate.add(targetFolder);
-                } catch (statError) {
-                  this.addLog(`Failed to get stats for ${item.path}: ${statError.message}`);
-                }
-              }
-            }
-          }
-        } catch (error) {
-          this.addLog(`Failed to scan folder ${folderPath}: ${error.message}`);
-        }
-      };
+			// Check if DCIM exists
+			const dcimExists = await exists(dcimPath);
+			if (!dcimExists) {
+				runInAction(() => {
+					this.photoSortStats = {
+						totalPhotos: 0,
+						foldersToCreate: [],
+						error: 'DCIM folder not found',
+					};
+				});
+				return;
+			}
 
-      await scanFolder(dcimPath);
+			const photoExtensions = [
+				'.jpg',
+				'.jpeg',
+				'.png',
+				'.gif',
+				'.bmp',
+				'.webp',
+				'.heic',
+				'.raw',
+				'.dng',
+			];
+			const photosToMove = [];
+			const foldersToCreate = new Set();
 
-      runInAction(() => {
-        this.photoSortStats = {
-          totalPhotos: photosToMove.length,
-          foldersToCreate: Array.from(foldersToCreate).sort(),
-          photosToMove,
-          error: null
-        };
-      });
+			// Recursively scan DCIM folder
+			const scanFolder = async folderPath => {
+				try {
+					const items = await readDir(folderPath);
 
-      this.addLog(`Photo sorting analysis complete: ${photosToMove.length} photos found, ${foldersToCreate.size} folders to create`);
+					for (const item of items) {
+						if (item.isDirectory()) {
+							await scanFolder(item.path);
+						} else if (item.isFile()) {
+							const extension = item.name
+								.toLowerCase()
+								.substring(item.name.lastIndexOf('.'));
+							if (photoExtensions.includes(extension)) {
+								try {
+									const fileStats = await stat(item.path);
+									const modDate = new Date(fileStats.mtime);
+									const year = modDate.getFullYear();
+									const month = String(modDate.getMonth() + 1).padStart(2, '0');
 
-    } catch (error) {
-      this.addLog(`Photo sorting analysis failed: ${error.message}`);
-      runInAction(() => {
-        this.photoSortStats = {
-          totalPhotos: 0,
-          foldersToCreate: [],
-          error: error.message
-        };
-      });
-    }
-  };
+									const targetFolder = `${year}/${month}`;
+									const targetPath = `${rootPath}/${targetFolder}`;
 
-  sortPhotos = async () => {
-    if (!this.photoSortStats || this.photoSortStats.totalPhotos === 0) {
-      ToastAndroid.show('No photos to sort. Run analysis first.', ToastAndroid.LONG);
-      return;
-    }
+									photosToMove.push({
+										sourcePath: item.path,
+										targetPath: `${targetPath}/${item.name}`,
+										targetFolder,
+										fileName: item.name,
+										modDate: modDate.toISOString(),
+										fileStats,
+									});
 
-    if (this.isSortingPhotos) {
-      ToastAndroid.show('Photo sorting already in progress', ToastAndroid.SHORT);
-      return;
-    }
+									foldersToCreate.add(targetFolder);
+								} catch (statError) {
+									this.addLog(
+										`Failed to get stats for ${item.path}: ${statError.message}`,
+									);
+								}
+							}
+						}
+					}
+				} catch (error) {
+					this.addLog(`Failed to scan folder ${folderPath}: ${error.message}`);
+				}
+			};
 
-    runInAction(() => {
-      this.isSortingPhotos = true;
-    });
+			await scanFolder(dcimPath);
 
-    try {
-      this.addLog('Starting photo sorting process...');
-      const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
-      
-      // Step 1: Create all necessary folders first
-      this.addLog('Step 1: Creating folder structure...');
-      for (const folder of this.photoSortStats.foldersToCreate) {
-        const folderPath = `${rootPath}/${folder}`;
-        try {
-          const folderExists = await exists(folderPath);
-          if (!folderExists) {
-            await mkdir(folderPath, { NSURLIsExcludedFromBackupKey: false });
-            this.addLog(`Created folder: ${folder}`);
-          } else {
-            this.addLog(`Folder already exists: ${folder}`);
-          }
-        } catch (error) {
-          this.addLog(`Failed to create folder ${folder}: ${error.message}`);
-          throw error; // Stop if we can't create folders
-        }
-      }
+			runInAction(() => {
+				this.photoSortStats = {
+					totalPhotos: photosToMove.length,
+					foldersToCreate: Array.from(foldersToCreate).sort(),
+					photosToMove,
+					error: null,
+				};
+			});
 
-      // Step 2: Create albums in database for each folder
-      this.addLog('Step 2: Creating database albums...');
-      const albumMap = new Map();
-      for (const folder of this.photoSortStats.foldersToCreate) {
-        try {
-          this.addLog(`Creating album for folder: ${folder}`);
-          const albumId = await this.findOrCreateAlbum(`/${folder}`);
-          albumMap.set(folder, albumId);
-          this.addLog(`Album ready: ${folder} (ID: ${albumId})`);
-        } catch (error) {
-          this.addLog(`Failed to create album for ${folder}: ${error.message}`);
-          // Continue with other albums even if one fails
-        }
-      }
+			this.addLog(
+				`Photo sorting analysis complete: ${photosToMove.length} photos found, ${foldersToCreate.size} folders to create`,
+			);
+		} catch (error) {
+			this.addLog(`Photo sorting analysis failed: ${error.message}`);
+			runInAction(() => {
+				this.photoSortStats = {
+					totalPhotos: 0,
+					foldersToCreate: [],
+					error: error.message,
+				};
+			});
+		}
+	};
 
-      // Step 3: Move photos in smaller batches and add to database
-      this.addLog('Step 3: Moving photos and updating database...');
-      let movedCount = 0;
-      let errorCount = 0;
-      let addedToDbCount = 0;
-      const batchSize = 5; // Reduced batch size for better progress tracking
-      
-      for (let i = 0; i < this.photoSortStats.photosToMove.length; i += batchSize) {
-        const batch = this.photoSortStats.photosToMove.slice(i, i + batchSize);
-        this.addLog(`Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(this.photoSortStats.photosToMove.length/batchSize)}`);
-        
-        for (const photo of batch) {
-          try {
-            this.addLog(`Processing photo: ${photo.fileName}`);
-            
-            // Check if target file already exists
-            const targetExists = await exists(photo.targetPath);
-            if (targetExists) {
-              // Generate unique filename
-              const extension = photo.fileName.substring(photo.fileName.lastIndexOf('.'));
-              const baseName = photo.fileName.substring(0, photo.fileName.lastIndexOf('.'));
-              let counter = 1;
-              let newTargetPath = photo.targetPath;
-              let newFileName = photo.fileName;
-              
-              while (await exists(newTargetPath)) {
-                newFileName = `${baseName}_${counter}${extension}`;
-                newTargetPath = `${photo.targetPath.substring(0, photo.targetPath.lastIndexOf('/'))}/${newFileName}`;
-                counter++;
-              }
-              
-              photo.targetPath = newTargetPath;
-              photo.fileName = newFileName;
-              this.addLog(`Renamed to avoid conflict: ${newFileName}`);
-            }
-            
-            // Move the file
-            this.addLog(`Moving file: ${photo.sourcePath} -> ${photo.targetPath}`);
-            await moveFile(photo.sourcePath, photo.targetPath);
-            movedCount++;
-            this.addLog(`Successfully moved: ${photo.fileName} -> ${photo.targetFolder}`);
-            
-            // Add to database
-            const albumId = albumMap.get(photo.targetFolder);
-            if (albumId && this.isDatabaseReady) {
-              try {
-                this.addLog(`Adding to database: ${photo.fileName}`);
-                // Get updated file stats after move
-                const newFileStats = await stat(photo.targetPath);
-                await this.addImageToDatabase(photo.fileName, albumId, newFileStats);
-                addedToDbCount++;
-                this.addLog(`Successfully added to database: ${photo.fileName}`);
-              } catch (dbError) {
-                this.addLog(`Failed to add ${photo.fileName} to database: ${dbError.message}`);
-                // Continue even if database addition fails
-              }
-            } else {
-              this.addLog(`Skipping database addition for ${photo.fileName}: albumId=${albumId}, dbReady=${this.isDatabaseReady}`);
-            }
-            
-          } catch (error) {
-            errorCount++;
-            this.addLog(`Failed to process ${photo.fileName}: ${error.message}`);
-            // Continue with next photo even if this one fails
-          }
-        }
-        
-        // Update progress more frequently
-        const progressMessage = `Processed ${Math.min(i + batchSize, this.photoSortStats.totalPhotos)}/${this.photoSortStats.totalPhotos} photos...`;
-        ToastAndroid.show(progressMessage, ToastAndroid.SHORT);
-        this.addLog(progressMessage);
-        
-        // Small delay to prevent overwhelming the system
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+	sortPhotos = async () => {
+		if (!this.photoSortStats || this.photoSortStats.totalPhotos === 0) {
+			ToastAndroid.show(
+				'No photos to sort. Run analysis first.',
+				ToastAndroid.LONG,
+			);
+			return;
+		}
 
-      // Step 4: Refresh albums and images data
-      this.addLog('Step 4: Refreshing data...');
-      if (addedToDbCount > 0) {
-        try {
-          await this.readAlbums();
-          this.addLog('Albums refreshed after photo sorting');
-        } catch (error) {
-          this.addLog(`Failed to refresh albums: ${error.message}`);
-        }
-      }
+		if (this.isSortingPhotos) {
+			ToastAndroid.show(
+				'Photo sorting already in progress',
+				ToastAndroid.SHORT,
+			);
+			return;
+		}
 
-      const message = `Photo sorting complete! Moved ${movedCount} photos, added ${addedToDbCount} to database, ${errorCount} errors`;
-      ToastAndroid.show(message, ToastAndroid.LONG);
-      this.addLog(message);
+		runInAction(() => {
+			this.isSortingPhotos = true;
+		});
 
-      // Clear stats after successful sort
-      runInAction(() => {
-        this.photoSortStats = null;
-      });
+		try {
+			this.addLog('Starting photo sorting process...');
+			const rootPath = `/storage/emulated/0/${this.normalizedRootPath}`;
 
-    } catch (error) {
-      const message = `Photo sorting failed: ${error.message}`;
-      ToastAndroid.show(message, ToastAndroid.LONG);
-      this.addLog(message);
-    } finally {
-      runInAction(() => {
-        this.isSortingPhotos = false;
-      });
-      this.addLog('Photo sorting process finished');
-    }
-  };
+			// Step 1: Create all necessary folders first
+			this.addLog('Step 1: Creating folder structure...');
+			for (const folder of this.photoSortStats.foldersToCreate) {
+				const folderPath = `${rootPath}/${folder}`;
+				try {
+					const folderExists = await exists(folderPath);
+					if (!folderExists) {
+						await mkdir(folderPath, { NSURLIsExcludedFromBackupKey: false });
+						this.addLog(`Created folder: ${folder}`);
+					} else {
+						this.addLog(`Folder already exists: ${folder}`);
+					}
+				} catch (error) {
+					this.addLog(`Failed to create folder ${folder}: ${error.message}`);
+					throw error; // Stop if we can't create folders
+				}
+			}
 
-  // Tag management methods
-  createTag = (name, parentId = null) => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+			// Step 2: Create albums in database for each folder
+			this.addLog('Step 2: Creating database albums...');
+			const albumMap = new Map();
+			for (const folder of this.photoSortStats.foldersToCreate) {
+				try {
+					this.addLog(`Creating album for folder: ${folder}`);
+					const albumId = await this.findOrCreateAlbum(`/${folder}`);
+					albumMap.set(folder, albumId);
+					this.addLog(`Album ready: ${folder} (ID: ${albumId})`);
+				} catch (error) {
+					this.addLog(`Failed to create album for ${folder}: ${error.message}`);
+					// Continue with other albums even if one fails
+				}
+			}
 
-      this.db.transaction(tx => {
-        // First, get the next available tag ID
-        tx.executeSql(
-          'SELECT MAX(id) as maxId FROM Tags',
-          [],
-          (_, res) => {
-            const nextId = (res.rows.item(0).maxId || 25) + 1;
-            const pid = parentId || 0;
+			// Step 3: Move photos in smaller batches and add to database
+			this.addLog('Step 3: Moving photos and updating database...');
+			let movedCount = 0;
+			let errorCount = 0;
+			let addedToDbCount = 0;
+			const batchSize = 5; // Reduced batch size for better progress tracking
 
-            tx.executeSql(
-              'INSERT INTO Tags (id, pid, name) VALUES (?, ?, ?)',
-              [nextId, pid, name],
-              (_, tagRes) => {
-                // Update local state
-                const newTag = { id: nextId, pid, name, children: [] };
-                runInAction(() => {
-                  this.tags.set(nextId, newTag);
+			for (
+				let i = 0;
+				i < this.photoSortStats.photosToMove.length;
+				i += batchSize
+			) {
+				const batch = this.photoSortStats.photosToMove.slice(i, i + batchSize);
+				this.addLog(
+					`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+						this.photoSortStats.photosToMove.length / batchSize,
+					)}`,
+				);
 
-                  if (parentId && this.tags.has(parentId)) {
-                    // Add to parent's children
-                    const parent = this.tags.get(parentId);
-                    parent.children.push(newTag);
-                  } else {
-                    // Add to root level
-                    this.tagTree.set(nextId, newTag);
-                  }
-                });
+				for (const photo of batch) {
+					try {
+						this.addLog(`Processing photo: ${photo.fileName}`);
 
-                this.markDatabaseChanged();
-                this.addLog(`Created tag: ${name} (ID: ${nextId})`);
-                resolve(newTag);
-              },
-              (_, er) => {
-                this.addLog(`CREATE TAG ERR: ${er.message}`);
-                reject(er);
-              }
-            );
-          },
-          (_, er) => {
-            this.addLog(`GET MAX TAG ID ERR: ${er.message}`);
-            reject(er);
-          }
-        );
-      });
-    });
-  };
+						// Check if target file already exists
+						const targetExists = await exists(photo.targetPath);
+						if (targetExists) {
+							// Generate unique filename
+							const extension = photo.fileName.substring(
+								photo.fileName.lastIndexOf('.'),
+							);
+							const baseName = photo.fileName.substring(
+								0,
+								photo.fileName.lastIndexOf('.'),
+							);
+							let counter = 1;
+							let newTargetPath = photo.targetPath;
+							let newFileName = photo.fileName;
 
-  addTagToPhoto = (tagId, imageId) => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+							while (await exists(newTargetPath)) {
+								newFileName = `${baseName}_${counter}${extension}`;
+								newTargetPath = `${photo.targetPath.substring(
+									0,
+									photo.targetPath.lastIndexOf('/'),
+								)}/${newFileName}`;
+								counter++;
+							}
 
-      // Check if tag is already assigned
-      const existingTags = this.imagetags.get(imageId) || [];
-      if (existingTags.some(t => t.tagid === tagId)) {
-        resolve(); // Already assigned
-        return;
-      }
+							photo.targetPath = newTargetPath;
+							photo.fileName = newFileName;
+							this.addLog(`Renamed to avoid conflict: ${newFileName}`);
+						}
 
-      this.db.transaction(tx => {
-        tx.executeSql(
-          'INSERT INTO ImageTags (imageid, tagid) VALUES (?, ?)',
-          [imageId, tagId],
-          () => {
-            // Update local state
-            const tag = this.tags.get(tagId);
-            if (tag) {
-              const updatedTags = [...existingTags, { tagid: tagId, tagname: tag.name }];
-              runInAction(() => {
-                this.imagetags.set(imageId, updatedTags);
-              });
-              this.markDatabaseChanged();
-              this.addLog(`Added tag ${tag.name} to image ${imageId}`);
-            }
-            resolve();
-          },
-          (_, er) => {
-            this.addLog(`ADD TAG TO PHOTO ERR: ${er.message}`);
-            reject(er);
-          }
-        );
-      });
-    });
-  };
+						// Move the file
+						this.addLog(
+							`Moving file: ${photo.sourcePath} -> ${photo.targetPath}`,
+						);
+						await moveFile(photo.sourcePath, photo.targetPath);
+						movedCount++;
+						this.addLog(
+							`Successfully moved: ${photo.fileName} -> ${photo.targetFolder}`,
+						);
 
-  removeTagFromPhoto = (tagid, imageid) => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+						// Add to database
+						const albumId = albumMap.get(photo.targetFolder);
+						if (albumId && this.isDatabaseReady) {
+							try {
+								this.addLog(`Adding to database: ${photo.fileName}`);
+								// Get updated file stats after move
+								const newFileStats = await stat(photo.targetPath);
+								await this.addImageToDatabase(
+									photo.fileName,
+									albumId,
+									newFileStats,
+								);
+								addedToDbCount++;
+								this.addLog(
+									`Successfully added to database: ${photo.fileName}`,
+								);
+							} catch (dbError) {
+								this.addLog(
+									`Failed to add ${photo.fileName} to database: ${dbError.message}`,
+								);
+								// Continue even if database addition fails
+							}
+						} else {
+							this.addLog(
+								`Skipping database addition for ${photo.fileName}: albumId=${albumId}, dbReady=${this.isDatabaseReady}`,
+							);
+						}
+					} catch (error) {
+						errorCount++;
+						this.addLog(
+							`Failed to process ${photo.fileName}: ${error.message}`,
+						);
+						// Continue with next photo even if this one fails
+					}
+				}
 
-      let imagetags = this.imagetags.get(imageid);
-      if (imagetags) {
-        imagetags = imagetags.filter(tag => tag.tagid !== tagid);
-        runInAction(() => {
-          this.imagetags.set(imageid, imagetags);
-        });
-        this.db.transaction(tx => {
-          tx.executeSql(
-            'DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?',
-            [imageid, tagid],
-            () => {
-              this.markDatabaseChanged();
-              resolve();
-            },
-            er => {
-              this.addLog(`REMOVE TAGS FROM PHOTO ERR: ${er.message}`);
-              reject(er);
-            },
-          );
-        });
-      } else {
-        resolve();
-      }
-    });
-  };
+				// Update progress more frequently
+				const progressMessage = `Processed ${Math.min(
+					i + batchSize,
+					this.photoSortStats.totalPhotos,
+				)}/${this.photoSortStats.totalPhotos} photos...`;
+				ToastAndroid.show(progressMessage, ToastAndroid.SHORT);
+				this.addLog(progressMessage);
 
-  deleteTag = (tagId) => {
-    return new Promise((resolve, reject) => {
-      if (!this.isDatabaseReady) {
-        reject(new Error('Database not ready'));
-        return;
-      }
+				// Small delay to prevent overwhelming the system
+				await new Promise(resolve => setTimeout(resolve, 100));
+			}
 
-      this.db.transaction(tx => {
-        // First remove all image associations
-        tx.executeSql(
-          'DELETE FROM ImageTags WHERE tagid = ?',
-          [tagId],
-          () => {
-            // Remove from TagsTree
-            tx.executeSql(
-              'DELETE FROM TagsTree WHERE id = ?',
-              [tagId],
-              () => {
-                // Remove the tag itself
-                tx.executeSql(
-                  'DELETE FROM Tags WHERE id = ?',
-                  [tagId],
-                  () => {
-                    // Update local state
-                    const tag = this.tags.get(tagId);
-                    if (tag) {
-                      runInAction(() => {
-                        // Remove from all image tags
-                        this.imagetags.forEach((tags, imageId) => {
-                          const filteredTags = tags.filter(t => t.tagid !== tagId);
-                          this.imagetags.set(imageId, filteredTags);
-                        });
-                        
-                        // Remove from tags map
-                        this.tags.delete(tagId);
-                        
-                        // Remove from tree
-                        this.tagTree.delete(tagId);
-                        
-                        // Remove from parent's children if it has a parent
-                        this.tags.forEach(parentTag => {
-                          parentTag.children = parentTag.children.filter(child => child.id !== tagId);
-                        });
-                        
-                        // Remove from filters
-                        this.activeFilters.tagIds.delete(tagId);
-                        this.wallpaperTags.delete(tagId);
-                      });
-                      
-                      this.markDatabaseChanged();
-                      this.addLog(`Deleted tag: ${tag.name}`);
-                    }
-                    resolve();
-                  },
-                  (_, er) => {
-                    this.addLog(`DELETE TAG ERR: ${er.message}`);
-                    reject(er);
-                  }
-                );
-              },
-              (_, er) => {
-                this.addLog(`DELETE TAG TREE ERR: ${er.message}`);
-                reject(er);
-              }
-            );
-          },
-          (_, er) => {
-            this.addLog(`DELETE TAG ASSOCIATIONS ERR: ${er.message}`);
-            reject(er);
-          }
-        );
-      });
-    });
-  };
+			// Step 4: Refresh albums and images data
+			this.addLog('Step 4: Refreshing data...');
+			if (addedToDbCount > 0) {
+				try {
+					await this.readAlbums();
+					this.addLog('Albums refreshed after photo sorting');
+				} catch (error) {
+					this.addLog(`Failed to refresh albums: ${error.message}`);
+				}
+			}
 
-  dropUserSelection = () => {
-    runInAction(() => {
-      this.userSelectedImages.clear();
-    });
-  };
+			const message = `Photo sorting complete! Moved ${movedCount} photos, added ${addedToDbCount} to database, ${errorCount} errors`;
+			ToastAndroid.show(message, ToastAndroid.LONG);
+			this.addLog(message);
 
-  addAllToUserSelection = () => {
-    runInAction(() => {
-      this.userSelectedImages = new Set(this.images.map(image => image.id));
-    });
-  };
+			// Clear stats after successful sort
+			runInAction(() => {
+				this.photoSortStats = null;
+			});
+		} catch (error) {
+			const message = `Photo sorting failed: ${error.message}`;
+			ToastAndroid.show(message, ToastAndroid.LONG);
+			this.addLog(message);
+		} finally {
+			runInAction(() => {
+				this.isSortingPhotos = false;
+			});
+			this.addLog('Photo sorting process finished');
+		}
+	};
 
-  addToUserSelection = id => {
-    runInAction(() => {
-      this.userSelectedImages.add(id);
-    });
-  };
+	// Tag management methods
+	createTag = (name, parentId = null) => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-  removeFromUserSelection = id => {
-    runInAction(() => {
-      this.userSelectedImages.delete(id);
-    });
-  };
+			this.db.transaction(tx => {
+				// First, get the next available tag ID
+				tx.executeSql(
+					'SELECT MAX(id) as maxId FROM Tags',
+					[],
+					(_, res) => {
+						const nextId = (res.rows.item(0).maxId || 25) + 1;
+						const pid = parentId || 0;
 
-  // Wallpaper settings
-  addWallpaperTag = id => {
-    runInAction(() => {
-      this.wallpaperTags.add(id);
-      mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
-    });
-  };
+						tx.executeSql(
+							'INSERT INTO Tags (id, pid, name) VALUES (?, ?, ?)',
+							[nextId, pid, name],
+							(_, tagRes) => {
+								// Update local state
+								const newTag = { id: nextId, pid, name, children: [] };
+								runInAction(() => {
+									this.tags.set(nextId, newTag);
 
-  removeWallpaperTag = id => {
-    runInAction(() => {
-      this.wallpaperTags.delete(id);
-      mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
-    });
-  };
+									if (parentId && this.tags.has(parentId)) {
+										// Add to parent's children
+										const parent = this.tags.get(parentId);
+										parent.children.push(newTag);
+									} else {
+										// Add to root level
+										this.tagTree.set(nextId, newTag);
+									}
+								});
 
-  setWallpaperType = type => {
-    runInAction(() => {
-      this.wallpaperType = type;
-      mmkv.set('wallpaperType', type);
-    });
-  };
+								this.markDatabaseChanged();
+								this.addLog(`Created tag: ${name} (ID: ${nextId})`);
+								resolve(newTag);
+							},
+							(_, er) => {
+								this.addLog(`CREATE TAG ERR: ${er.message}`);
+								reject(er);
+							},
+						);
+					},
+					(_, er) => {
+						this.addLog(`GET MAX TAG ID ERR: ${er.message}`);
+						reject(er);
+					},
+				);
+			});
+		});
+	};
 
-  updateWallpaper = async () => {
-    try {
-      if (!this.isDatabaseReady) {
-        this.addLog('Cannot update wallpaper: Database not ready');
-        ToastAndroid.show('Database not ready', ToastAndroid.SHORT);
-        return;
-      }
+	addTagToPhoto = (tagId, imageId) => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-      if (this.wallpaperTags.size === 0) {
-        this.addLog('Cannot update wallpaper: No wallpaper tags selected');
-        ToastAndroid.show('No wallpaper tags selected', ToastAndroid.SHORT);
-        return;
-      }
+			// Check if tag is already assigned
+			const existingTags = this.imagetags.get(imageId) || [];
+			if (existingTags.some(t => t.tagid === tagId)) {
+				resolve(); // Already assigned
+				return;
+			}
 
-      this.addLog('Starting manual wallpaper update...');
-      ToastAndroid.show('Updating wallpaper...', ToastAndroid.SHORT);
+			this.db.transaction(tx => {
+				tx.executeSql(
+					'INSERT INTO ImageTags (imageid, tagid) VALUES (?, ?)',
+					[imageId, tagId],
+					() => {
+						// Update local state
+						const tag = this.tags.get(tagId);
+						if (tag) {
+							const updatedTags = [
+								...existingTags,
+								{ tagid: tagId, tagname: tag.name },
+							];
+							runInAction(() => {
+								this.imagetags.set(imageId, updatedTags);
+							});
+							this.markDatabaseChanged();
+							this.addLog(`Added tag ${tag.name} to image ${imageId}`);
+						}
+						resolve();
+					},
+					(_, er) => {
+						this.addLog(`ADD TAG TO PHOTO ERR: ${er.message}`);
+						reject(er);
+					},
+				);
+			});
+		});
+	};
 
-      // Get photos with selected tags
-      await this.selectPhotos({
-        albumIds: [],
-        tagIds: [...this.wallpaperTags],
-      });
+	removeTagFromPhoto = (tagid, imageid) => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-      if (this.images.length === 0) {
-        const message = 'No photos found with selected wallpaper tags';
-        ToastAndroid.show(message, ToastAndroid.SHORT);
-        this.addLog(message);
-        return;
-      }
+			let imagetags = this.imagetags.get(imageid);
+			if (imagetags) {
+				imagetags = imagetags.filter(tag => tag.tagid !== tagid);
+				runInAction(() => {
+					this.imagetags.set(imageid, imagetags);
+				});
+				this.db.transaction(tx => {
+					tx.executeSql(
+						'DELETE FROM ImageTags WHERE imageid = ? AND tagid = ?',
+						[imageid, tagid],
+						() => {
+							this.markDatabaseChanged();
+							resolve();
+						},
+						er => {
+							this.addLog(`REMOVE TAGS FROM PHOTO ERR: ${er.message}`);
+							reject(er);
+						},
+					);
+				});
+			} else {
+				resolve();
+			}
+		});
+	};
 
-      const randomIndex = Math.floor(Math.random() * this.images.length);
-      const photo = this.images[randomIndex];
+	deleteTag = tagId => {
+		return new Promise((resolve, reject) => {
+			if (!this.isDatabaseReady) {
+				reject(new Error('Database not ready'));
+				return;
+			}
 
-      this.addLog(`Setting wallpaper: ${photo.name} (type: ${this.wallpaperType})`);
+			this.db.transaction(tx => {
+				// First remove all image associations
+				tx.executeSql(
+					'DELETE FROM ImageTags WHERE tagid = ?',
+					[tagId],
+					() => {
+						// Remove from TagsTree
+						tx.executeSql(
+							'DELETE FROM TagsTree WHERE id = ?',
+							[tagId],
+							() => {
+								// Remove the tag itself
+								tx.executeSql(
+									'DELETE FROM Tags WHERE id = ?',
+									[tagId],
+									() => {
+										// Update local state
+										const tag = this.tags.get(tagId);
+										if (tag) {
+											runInAction(() => {
+												// Remove from all image tags
+												this.imagetags.forEach((tags, imageId) => {
+													const filteredTags = tags.filter(
+														t => t.tagid !== tagId,
+													);
+													this.imagetags.set(imageId, filteredTags);
+												});
 
-      try {
-        await NativeModules.WallpaperModule.setWallpaper(photo.uri, this.wallpaperType);
-        
-        // Update last wallpaper update time
-        const now = new Date().toISOString();
-        runInAction(() => {
-          this.lastWallpaperUpdate = now;
-        });
-        mmkv.set('lastWallpaperUpdate', now);
+												// Remove from tags map
+												this.tags.delete(tagId);
 
-        const message = 'Wallpaper updated successfully';
-        ToastAndroid.show(message, ToastAndroid.SHORT);
-        this.addLog(`${message}: ${photo.name}`);
-      } catch (error) {
-        const message = `Failed to set wallpaper: ${error.message}`;
-        ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
-        this.addLog(message);
-      }
+												// Remove from tree
+												this.tagTree.delete(tagId);
 
-    } catch (error) {
-      const message = `Wallpaper update error: ${error.message}`;
-      ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
-      this.addLog(message);
-    }
-  };
+												// Remove from parent's children if it has a parent
+												this.tags.forEach(parentTag => {
+													parentTag.children = parentTag.children.filter(
+														child => child.id !== tagId,
+													);
+												});
 
-  // Manual sync method that can be called from UI
-  forceSyncDatabase = async () => {
-    await this.syncDatabaseToOriginal();
-    ToastAndroid.show('Database synced successfully', ToastAndroid.SHORT);
-  };
+												// Remove from filters
+												this.activeFilters.tagIds.delete(tagId);
+												this.wallpaperTags.delete(tagId);
+											});
 
-  // Cleanup method to be called when app is closing
-  cleanup = async () => {
-    await this.syncDatabaseToOriginal();
-    
-    // Remove app state listener
-    AppState.removeEventListener('change', this.handleAppStateChange);
-    
-    // Close database connection
-    if (this.db) {
-      await new Promise((resolve, reject) => {
-        this.db.close(resolve, reject);
-      });
-    }
-  };
+											this.markDatabaseChanged();
+											this.addLog(`Deleted tag: ${tag.name}`);
+										}
+										resolve();
+									},
+									(_, er) => {
+										this.addLog(`DELETE TAG ERR: ${er.message}`);
+										reject(er);
+									},
+								);
+							},
+							(_, er) => {
+								this.addLog(`DELETE TAG TREE ERR: ${er.message}`);
+								reject(er);
+							},
+						);
+					},
+					(_, er) => {
+						this.addLog(`DELETE TAG ASSOCIATIONS ERR: ${er.message}`);
+						reject(er);
+					},
+				);
+			});
+		});
+	};
+
+	dropUserSelection = () => {
+		runInAction(() => {
+			this.userSelectedImages.clear();
+		});
+	};
+
+	addAllToUserSelection = () => {
+		runInAction(() => {
+			this.userSelectedImages = new Set(this.images.map(image => image.id));
+		});
+	};
+
+	addToUserSelection = id => {
+		runInAction(() => {
+			this.userSelectedImages.add(id);
+		});
+	};
+
+	removeFromUserSelection = id => {
+		runInAction(() => {
+			this.userSelectedImages.delete(id);
+		});
+	};
+
+	// Wallpaper settings
+	addWallpaperTag = id => {
+		runInAction(() => {
+			this.wallpaperTags.add(id);
+			mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
+		});
+	};
+
+	removeWallpaperTag = id => {
+		runInAction(() => {
+			this.wallpaperTags.delete(id);
+			mmkv.set('wallpaperTags', JSON.stringify([...this.wallpaperTags]));
+		});
+	};
+
+	setWallpaperType = type => {
+		runInAction(() => {
+			this.wallpaperType = type;
+			mmkv.set('wallpaperType', type);
+		});
+	};
+
+	updateWallpaper = async () => {
+		try {
+			if (!this.isDatabaseReady) {
+				this.addLog('Cannot update wallpaper: Database not ready');
+				ToastAndroid.show('Database not ready', ToastAndroid.SHORT);
+				return;
+			}
+
+			if (this.wallpaperTags.size === 0) {
+				this.addLog('Cannot update wallpaper: No wallpaper tags selected');
+				ToastAndroid.show('No wallpaper tags selected', ToastAndroid.SHORT);
+				return;
+			}
+
+			this.addLog('Starting manual wallpaper update...');
+			ToastAndroid.show('Updating wallpaper...', ToastAndroid.SHORT);
+
+			// Get photos with selected tags
+			await this.selectPhotos({
+				albumIds: [],
+				tagIds: [...this.wallpaperTags],
+			});
+
+			if (this.images.length === 0) {
+				const message = 'No photos found with selected wallpaper tags';
+				ToastAndroid.show(message, ToastAndroid.SHORT);
+				this.addLog(message);
+				return;
+			}
+
+			const randomIndex = Math.floor(Math.random() * this.images.length);
+			const photo = this.images[randomIndex];
+
+			this.addLog(
+				`Setting wallpaper: ${photo.name} (type: ${this.wallpaperType})`,
+			);
+
+			try {
+				await NativeModules.WallpaperModule.setWallpaper(
+					photo.uri,
+					this.wallpaperType,
+				);
+
+				// Update last wallpaper update time
+				const now = new Date().toISOString();
+				runInAction(() => {
+					this.lastWallpaperUpdate = now;
+				});
+				mmkv.set('lastWallpaperUpdate', now);
+
+				const message = 'Wallpaper updated successfully';
+				ToastAndroid.show(message, ToastAndroid.SHORT);
+				this.addLog(`${message}: ${photo.name}`);
+			} catch (error) {
+				const message = `Failed to set wallpaper: ${error.message}`;
+				ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
+				this.addLog(message);
+			}
+		} catch (error) {
+			const message = `Wallpaper update error: ${error.message}`;
+			ToastAndroid.show('Failed to update wallpaper', ToastAndroid.SHORT);
+			this.addLog(message);
+		}
+	};
+
+	// Manual sync method that can be called from UI
+	forceSyncDatabase = async () => {
+		await this.syncDatabaseToOriginal();
+		ToastAndroid.show('Database synced successfully', ToastAndroid.SHORT);
+	};
+
+	// Cleanup method to be called when app is closing
+	cleanup = async () => {
+		// Persist any pending changes back to the original database first
+		await this.syncDatabaseToOriginal();
+
+		// Remove app state listener
+		AppState.removeEventListener('change', this.handleAppStateChange);
+
+		// Force clear the cache on close so the next launch always seeds from
+		// the current copy of the original database. This also closes the
+		// active database connection.
+		await this.clearDBCache();
+	};
 }
 
 export const rootStore = new RootStore();
