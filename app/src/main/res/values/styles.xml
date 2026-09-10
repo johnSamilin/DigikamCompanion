@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.NineByFifteen" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="android:windowBackground">@color/punk_white</item>
+        <item name="android:textColorPrimary">#FF000000</item>
+        <item name="android:colorAccent">@color/punk_acid_green</item>
+        <item name="colorPrimary">@color/punk_ink</item>
+        <item name="colorSecondary">@color/punk_acid_green</item>
+        <item name="colorOnBackground">#FF000000</item>
+        <item name="colorOnSurface">#FF000000</item>
+    </style>
+</resources>

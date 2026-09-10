@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple hand-drawn photograph, kept inside the adaptive icon safe zone. -->
+    <path
+        android:fillColor="#FFFFFCF6"
+        android:pathData="M34,20L74,20L74,88L34,88Z" />
+    <!-- Slightly uneven double-line frame gives the photograph a pencil-sketch feel. -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF2E2B28"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.4"
+        android:pathData="M34,21L73,20L74,87L35,88Z" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF8D8173"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.1"
+        android:pathData="M37,24L70,23" />
+    <!-- A small sun and two spare mountain strokes read clearly at launcher size. -->
+    <path
+        android:fillColor="#FFD9775A"
+        android:pathData="M62,34A4.5,4.5 0,1 0,62.01,34Z" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF2E2B28"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2"
+        android:pathData="M38,70L48,55L55,63L62,48L70,70" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF8D8173"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.2"
+        android:pathData="M38,73L49,59L55,66L62,53L70,73" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF2E2B28"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.7"
+        android:pathData="M39,76C47,75 61,77 69,75" />
+</vector>
