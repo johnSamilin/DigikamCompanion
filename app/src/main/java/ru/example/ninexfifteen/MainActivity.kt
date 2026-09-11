@@ -2,6 +2,7 @@ package ru.example.ninexfifteen
 
 import android.content.ClipData
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.BitmapFactory
@@ -35,6 +36,11 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.Executors
 
+internal fun photoGridSpanCount(orientation: Int): Int = when (orientation) {
+    Configuration.ORIENTATION_LANDSCAPE -> 8
+    else -> 4
+}
+
 class MainActivity : FragmentActivity() {
     private lateinit var statusView: TextView
     private lateinit var loadingView: Button
@@ -61,6 +67,8 @@ class MainActivity : FragmentActivity() {
     private val loadVisiblePhotos = Runnable {
         (photosView.adapter as? PhotoAdapter)?.loadVisible(photosView)
     }
+    private val photoGridSpanCount: Int
+        get() = photoGridSpanCount(resources.configuration.orientation)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,7 +123,7 @@ class MainActivity : FragmentActivity() {
             setOnClickListener { pickCopyDestination() }
         }
         photosView = RecyclerView(this).apply {
-            layoutManager = GridLayoutManager(this@MainActivity, 4)
+            layoutManager = GridLayoutManager(this@MainActivity, photoGridSpanCount)
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     scheduleVisiblePhotoLoading()
@@ -329,6 +337,7 @@ class MainActivity : FragmentActivity() {
             ::togglePhotoSelection,
             { multiSelectMode },
             { it in selectedPhotoPaths },
+            photoGridSpanCount,
         )
         photosView.adapter = adapter
         (photosView.layoutManager as GridLayoutManager).spanSizeLookup =
@@ -551,6 +560,7 @@ class MainActivity : FragmentActivity() {
         private val onPhotoSelectionToggle: (String) -> Unit,
         private val isMultiSelectMode: () -> Boolean,
         private val isPhotoSelected: (String) -> Boolean,
+        private val spanCount: Int,
     ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         private val photos = sourcePhotos.map {
             GridPhoto(File(rootFolder, it.relativePath).path, it.uniqueHash, it.fileSize)
@@ -580,8 +590,8 @@ class MainActivity : FragmentActivity() {
             }
 
             val size = parent.width.takeIf { it > 0 }
-                ?.div(4)
-                ?: parent.resources.displayMetrics.widthPixels / 4
+                ?.div(spanCount)
+                ?: parent.resources.displayMetrics.widthPixels / spanCount
             val imageView = ImageView(parent.context).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
             }
@@ -619,7 +629,7 @@ class MainActivity : FragmentActivity() {
             is GridItem.Photo -> PHOTO_VIEW_TYPE
         }
 
-        fun getSpanSize(position: Int) = if (getItemViewType(position) == HEADER_VIEW_TYPE) 4 else 1
+        fun getSpanSize(position: Int) = if (getItemViewType(position) == HEADER_VIEW_TYPE) spanCount else 1
 
         private fun bindPhoto(holder: PhotoViewHolder, item: GridItem.Photo) {
             val photo = File(item.photo.path)
@@ -667,7 +677,7 @@ class MainActivity : FragmentActivity() {
                 val bitmap = thumbnail
                     ?.takeUnless(::isPgf)
                     ?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-                    ?: decodeSampledOriginal(photo.path, recyclerView.width / 4)
+                    ?: decodeSampledOriginal(photo.path, recyclerView.width / spanCount)
                 recyclerView.post {
                     if (holder.itemView.isAttachedToWindow && holder.boundPhoto == photo) {
                         if (bitmap == null) {
