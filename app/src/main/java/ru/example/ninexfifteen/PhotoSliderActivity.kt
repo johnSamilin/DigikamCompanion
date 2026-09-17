@@ -25,6 +25,7 @@ import kotlin.math.roundToInt
 class PhotoSliderActivity : Activity() {
     private lateinit var detailsPanel: LinearLayout
     private lateinit var pathView: TextView
+    private lateinit var openWithButton: Button
     private lateinit var shareButton: Button
     private lateinit var photos: List<String>
     private var currentPhotoPosition = 0
@@ -93,6 +94,16 @@ class PhotoSliderActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ))
+
+        openWithButton = Button(this@PhotoSliderActivity).apply {
+            text = "Open with"
+            PunkStyle.button(this)
+            setOnClickListener { openVisiblePhoto() }
+        }
+        addView(openWithButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { setMargins(dp(16), 0, dp(16), dp(8)) })
 
         shareButton = Button(this@PhotoSliderActivity).apply {
             text = "Share"
@@ -163,11 +174,11 @@ class PhotoSliderActivity : Activity() {
             return
         }
 
-        shareButton.isEnabled = false
+        setPhotoActionsEnabled(false)
         Thread {
-            val result = runCatching { createShareUri(photo) }
+            val result = runCatching { createExternalAccessUri(photo) }
             runOnUiThread {
-                shareButton.isEnabled = true
+                setPhotoActionsEnabled(true)
                 result.onSuccess { uri ->
                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                         type = contentResolver.getType(Uri.fromFile(photo)) ?: "image/*"
@@ -184,7 +195,39 @@ class PhotoSliderActivity : Activity() {
         }.start()
     }
 
-    private fun createShareUri(photo: File): Uri {
+    private fun openVisiblePhoto() {
+        val photo = File(photos[currentPhotoPosition])
+        if (!photo.isFile) {
+            Toast.makeText(this, "Photo not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        setPhotoActionsEnabled(false)
+        Thread {
+            val result = runCatching { createExternalAccessUri(photo) }
+            runOnUiThread {
+                setPhotoActionsEnabled(true)
+                result.onSuccess { uri ->
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, contentResolver.getType(Uri.fromFile(photo)) ?: "image/*")
+                        clipData = ClipData.newUri(contentResolver, "Photo", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    runCatching { startActivity(viewIntent) }
+                        .onFailure { Toast.makeText(this, "No app available to open this photo", Toast.LENGTH_SHORT).show() }
+                }.onFailure {
+                    Toast.makeText(this, "Unable to prepare photo for opening", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun setPhotoActionsEnabled(isEnabled: Boolean) {
+        openWithButton.isEnabled = isEnabled
+        shareButton.isEnabled = isEnabled
+    }
+
+    private fun createExternalAccessUri(photo: File): Uri {
         val shareDirectory = File(cacheDir, "shared-photos").apply {
             deleteRecursively()
             mkdirs()
