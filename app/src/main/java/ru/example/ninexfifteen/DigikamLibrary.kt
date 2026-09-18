@@ -1,14 +1,18 @@
 package ru.example.ninexfifteen
 
 import android.content.Context
+import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Environment
 import android.provider.DocumentsContract
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.ArrayDeque
 
 class DigikamLibrary(private val context: Context) {
@@ -63,6 +67,64 @@ class DigikamLibrary(private val context: Context) {
         }
     } ?: emptyList()
 
+    fun indexSortedPhotos(photos: List<PhotoSorting.SortedPhoto>): Int? {
+        if (photos.isEmpty()) return 0
+        val databaseFile = findDatabaseInDirectory(AppSettings.rootFolder(context))
+            ?: findDatabaseInDirectory(Environment.getExternalStorageDirectory())
+            ?: return null
+
+        databaseFile.use { file ->
+            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { database ->
+                database.beginTransaction()
+                try {
+                    val albumRoot = database.rawQuery("SELECT albumRoot FROM Albums LIMIT 1", null).use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getLong(0) else 1L
+                    }
+                    val albums = mutableMapOf<String, Long>()
+                    photos.map(PhotoSorting.SortedPhoto::folder).distinct().forEach { folder ->
+                        val path = "/$folder"
+                        val albumId = database.rawQuery(
+                            "SELECT id FROM Albums WHERE relativePath = ? LIMIT 1",
+                            arrayOf(path),
+                        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+                            ?: nextId(database, "Albums").also { id ->
+                                database.insertOrThrow("Albums", null, ContentValues().apply {
+                                    put("id", id)
+                                    put("albumRoot", albumRoot)
+                                    put("relativePath", path)
+                                })
+                            }
+                        albums[folder] = albumId
+                    }
+                    photos.forEach { photo ->
+                        database.insertOrThrow("Images", null, ContentValues().apply {
+                            put("id", nextId(database, "Images"))
+                            put("name", photo.file.name)
+                            put("album", albums.getValue(photo.folder))
+                            put("modificationDate", photo.file.lastModified().toDigikamDate())
+                            put("fileSize", photo.file.length())
+                            put("uniqueHash", "${photo.folder}/${photo.file.name}:${photo.file.lastModified()}:${photo.file.length()}")
+                            put("status", 1)
+                            put("category", 1)
+                            put("format", photo.file.extension.uppercase())
+                            put("colorDepth", 8)
+                            put("colorModel", "RGB")
+                            put("creationDate", photo.file.lastModified().toDigikamDate())
+                            put("digitizationDate", photo.file.lastModified().toDigikamDate())
+                            put("orientation", 1)
+                            put("width", 0)
+                            put("height", 0)
+                        })
+                    }
+                    database.setTransactionSuccessful()
+                    return photos.size
+                } finally {
+                    database.endTransaction()
+                }
+            }
+        }
+    }
+
     private fun <T> openDatabase(block: (SQLiteDatabase) -> T): T? {
         val databaseFile = AppSettings.rootFolderUri(context)
             ?.let(::findDatabaseInTree)
@@ -73,6 +135,14 @@ class DigikamLibrary(private val context: Context) {
             return SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use(block)
         }
     }
+
+    private fun nextId(database: SQLiteDatabase, table: String): Long = database
+        .rawQuery("SELECT COALESCE(MAX(id), 0) + 1 FROM $table", null)
+        .use { cursor -> cursor.moveToFirst(); cursor.getLong(0) }
+
+    private fun Long.toDigikamDate(): String = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
+        Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()),
+    )
 
     private fun queryPhotos(
         database: SQLiteDatabase,
