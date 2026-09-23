@@ -27,6 +27,7 @@ class PhotoSliderActivity : Activity() {
     private lateinit var pathView: TextView
     private lateinit var openWithButton: Button
     private lateinit var shareButton: Button
+    private lateinit var makeAnotherButton: Button
     private lateinit var photos: List<String>
     private var currentPhotoPosition = 0
     private var hiddenPanelOffset = 0f
@@ -101,6 +102,16 @@ class PhotoSliderActivity : Activity() {
             setOnClickListener { openVisiblePhoto() }
         }
         addView(openWithButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { setMargins(dp(16), 0, dp(16), dp(8)) })
+
+        makeAnotherButton = Button(this@PhotoSliderActivity).apply {
+            text = "Make another"
+            PunkStyle.button(this)
+            setOnClickListener { makeAnotherPhoto() }
+        }
+        addView(makeAnotherButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { setMargins(dp(16), 0, dp(16), dp(8)) })
@@ -222,8 +233,19 @@ class PhotoSliderActivity : Activity() {
         }.start()
     }
 
+    private fun makeAnotherPhoto() {
+        val photo = File(photos[currentPhotoPosition])
+        if (!photo.isFile) {
+            Toast.makeText(this, "Photo not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        startActivity(Intent(this, CameraActivity::class.java).putExtra(CameraActivity.EXTRA_REFERENCE_PATH, photo.path))
+    }
+
     private fun setPhotoActionsEnabled(isEnabled: Boolean) {
         openWithButton.isEnabled = isEnabled
+        makeAnotherButton.isEnabled = isEnabled
         shareButton.isEnabled = isEnabled
     }
 

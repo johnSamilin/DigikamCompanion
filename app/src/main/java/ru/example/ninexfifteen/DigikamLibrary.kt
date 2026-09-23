@@ -97,8 +97,9 @@ class DigikamLibrary(private val context: Context) {
                         albums[folder] = albumId
                     }
                     photos.forEach { photo ->
+                        val imageId = nextId(database, "Images")
                         database.insertOrThrow("Images", null, ContentValues().apply {
-                            put("id", nextId(database, "Images"))
+                            put("id", imageId)
                             put("name", photo.file.name)
                             put("album", albums.getValue(photo.folder))
                             put("modificationDate", photo.file.lastModified().toDigikamDate())
@@ -106,6 +107,9 @@ class DigikamLibrary(private val context: Context) {
                             put("uniqueHash", "${photo.folder}/${photo.file.name}:${photo.file.lastModified()}:${photo.file.length()}")
                             put("status", 1)
                             put("category", 1)
+                        })
+                        database.insertOrThrow("ImageInformation", null, ContentValues().apply {
+                            put("imageid", imageId)
                             put("format", photo.file.extension.uppercase())
                             put("colorDepth", 8)
                             put("colorModel", "RGB")
