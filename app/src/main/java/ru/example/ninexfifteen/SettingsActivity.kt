@@ -9,12 +9,19 @@ import android.provider.DocumentsContract
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 
 class SettingsActivity : Activity() {
     private lateinit var rootFolderView: TextView
     private lateinit var statisticsView: TextView
     private lateinit var photoSortingView: TextView
+    private lateinit var wallpaperTagsView: TextView
+    private lateinit var wallpaperFrequencyGroup: RadioGroup
+    private lateinit var wallpaperRotationSwitch: Switch
     private var isLoadingStatistics = false
     private var isSortingPhotos = false
     private var photoSortingPlan: PhotoSorting.Plan? = null
@@ -39,8 +46,38 @@ class SettingsActivity : Activity() {
             setPadding(24, 24, 24, 24)
             PunkStyle.label(this)
         }
+        wallpaperTagsView = TextView(this).apply {
+            textSize = 16f
+            PunkStyle.outlined(this, 0xFFF5F5F5.toInt())
+            setPadding(24, 24, 24, 24)
+            PunkStyle.label(this)
+        }
+        wallpaperRotationSwitch = Switch(this).apply {
+            text = "Change wallpapers automatically"
+            PunkStyle.label(this)
+            setOnCheckedChangeListener { _, enabled ->
+                AppSettings.saveWallpaperRotationEnabled(this@SettingsActivity, enabled)
+                WallpaperRotation.schedule(this@SettingsActivity)
+            }
+        }
+        wallpaperFrequencyGroup = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+            listOf(1L, 3L, 5L).forEach { days ->
+                addView(RadioButton(this@SettingsActivity).apply {
+                    id = days.toInt()
+                    text = "$days ${if (days == 1L) "day" else "days"}"
+                    PunkStyle.label(this)
+                })
+            }
+            setOnCheckedChangeListener { _, checkedId ->
+                if (checkedId in WALLPAPER_FREQUENCIES) {
+                    AppSettings.saveWallpaperRotationFrequencyDays(this@SettingsActivity, checkedId.toLong())
+                    WallpaperRotation.schedule(this@SettingsActivity)
+                }
+            }
+        }
 
-        setContentView(LinearLayout(this).apply {
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
             PunkStyle.screen(this)
@@ -94,8 +131,40 @@ class SettingsActivity : Activity() {
                 PunkStyle.button(this)
                 setOnClickListener { sortPhotos() }
             }, buttonLayoutParams())
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Wallpaper rotation"
+                textSize = 18f
+                setPadding(0, 48, 0, 8)
+                PunkStyle.title(this)
+            })
+            addView(TextView(this@SettingsActivity).apply {
+                text = "A random photo matching the selected tags will be set on both the lock and home screens."
+                PunkStyle.label(this)
+            })
+            addView(wallpaperTagsView)
+            addView(Button(this@SettingsActivity).apply {
+                text = "Choose tags"
+                PunkStyle.button(this)
+                setOnClickListener {
+                    startActivity(Intent(this@SettingsActivity, FilterActivity::class.java).apply {
+                        putExtra(FilterActivity.EXTRA_WALLPAPER_TAGS_MODE, true)
+                    })
+                }
+            }, buttonLayoutParams())
+            addView(TextView(this@SettingsActivity).apply {
+                text = "Frequency"
+                setPadding(0, 24, 0, 8)
+                PunkStyle.title(this)
+            })
+            addView(wallpaperFrequencyGroup)
+            addView(wallpaperRotationSwitch)
+        }
+        setContentView(ScrollView(this).apply {
+            PunkStyle.screen(this)
+            addView(content)
         })
         showRootFolder()
+        showWallpaperRotation()
         photoSortingView.text = "Select a root folder, then analyze DCIM."
     }
 
@@ -104,6 +173,7 @@ class SettingsActivity : Activity() {
         loadStatistics()
         photoSortingPlan = null
         photoSortingView.text = "Root folder changed. Analyze DCIM again."
+        showWallpaperRotation()
     }
 
     @Deprecated("Deprecated in Java")
@@ -134,6 +204,17 @@ class SettingsActivity : Activity() {
 
     private fun showRootFolder() {
         rootFolderView.text = AppSettings.rootFolder(this).path
+    }
+
+    private fun showWallpaperRotation() {
+        val tags = AppSettings.wallpaperRotationTagIds(this)
+        wallpaperTagsView.text = if (tags.isEmpty()) {
+            "No tags selected."
+        } else {
+            "Selected tags: ${tags.size}"
+        }
+        wallpaperFrequencyGroup.check(AppSettings.wallpaperRotationFrequencyDays(this).toInt())
+        wallpaperRotationSwitch.isChecked = AppSettings.wallpaperRotationEnabled(this)
     }
 
     private fun displayNameFor(uriString: String): String {
@@ -222,5 +303,6 @@ class SettingsActivity : Activity() {
 
     private companion object {
         const val SELECT_ROOT_FOLDER = 1
+        val WALLPAPER_FREQUENCIES = setOf(1, 3, 5)
     }
 }

@@ -41,6 +41,10 @@ class DigikamLibrary(private val context: Context) {
         }
     }
 
+    fun loadPhotos(tagIds: Set<Long>): List<Photo> = openDatabase { database ->
+        queryPhotos(database, tagIds, emptySet())
+    } ?: emptyList()
+
     fun loadTags(): List<Tag> = openDatabase { database ->
         buildList {
             database.rawQuery(

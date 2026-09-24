@@ -32,10 +32,15 @@ class FilterActivity : Activity() {
     private var tagAdapter: TagAdapter? = null
     private var albumAdapter: AlbumAdapter? = null
     private val searchHandler = Handler(Looper.getMainLooper())
+    private val wallpaperTagsMode get() = intent.getBooleanExtra(EXTRA_WALLPAPER_TAGS_MODE, false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        selectedTagIds = AppSettings.selectedTagIds(this).toMutableSet()
+        selectedTagIds = (if (wallpaperTagsMode) {
+            AppSettings.wallpaperRotationTagIds(this)
+        } else {
+            AppSettings.selectedTagIds(this)
+        }).toMutableSet()
         selectedAlbumIds = AppSettings.selectedAlbumIds(this).toMutableSet()
 
         tagsView = RecyclerView(this).apply {
@@ -57,13 +62,15 @@ class FilterActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT,
             )
-            addView(
-                searchContainer("Search albums", albumsView) { query ->
-                    albumAdapter?.updateQuery(query)?.let(albumsView::scrollToPosition)
-                }.apply { visibility = View.GONE },
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            )
+            if (!wallpaperTagsMode) {
+                addView(
+                    searchContainer("Search albums", albumsView) { query ->
+                        albumAdapter?.updateQuery(query)?.let(albumsView::scrollToPosition)
+                    }.apply { visibility = View.GONE },
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                )
+            }
             addView(statusView, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         val tabs = TabLayout(this).apply {
@@ -71,13 +78,15 @@ class FilterActivity : Activity() {
             setSelectedTabIndicatorColor(Color.rgb(26, 26, 26))
             setSelectedTabIndicatorHeight((3 * resources.displayMetrics.density).toInt())
             setTabTextColors(ColorStateList.valueOf(Color.rgb(26, 26, 26)))
-            addTab(newTab().setText("Tags"), true)
-            addTab(newTab().setText("Albums"))
+            addTab(newTab().setText("Tags for wallpapers".takeIf { wallpaperTagsMode } ?: "Tags"), true)
+            if (!wallpaperTagsMode) addTab(newTab().setText("Albums"))
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab) {
                     val showingTags = tab.position == TAGS_TAB
                     (tagsView.parent as View).visibility = if (showingTags) View.VISIBLE else View.GONE
-                    (albumsView.parent as View).visibility = if (showingTags) View.GONE else View.VISIBLE
+                    if (!wallpaperTagsMode) {
+                        (albumsView.parent as View).visibility = if (showingTags) View.GONE else View.VISIBLE
+                    }
                 }
 
                 override fun onTabUnselected(tab: TabLayout.Tab) = Unit
@@ -109,14 +118,16 @@ class FilterActivity : Activity() {
                 val allChildrenById = tags.groupBy { it.parentId }
                 val systemTagIds = systemTagIds(tags, allChildrenById)
                 selectedTagIds.removeAll(systemTagIds)
-                AppSettings.saveSelectedTagIds(this, selectedTagIds)
+                saveSelectedTags()
                 val visibleTags = tags.filter { it.id !in systemTagIds }
                 childrenById = visibleTags.groupBy { it.parentId }
                 tagAdapter = TagAdapter(flattenTags(visibleTags), selectedTagIds, ::toggleTag)
                 tagsView.adapter = tagAdapter
-                childrenByAlbumId = albumChildren(albums)
-                albumAdapter = AlbumAdapter(flattenAlbums(albums), selectedAlbumIds, ::toggleAlbum)
-                albumsView.adapter = albumAdapter
+                if (!wallpaperTagsMode) {
+                    childrenByAlbumId = albumChildren(albums)
+                    albumAdapter = AlbumAdapter(flattenAlbums(albums), selectedAlbumIds, ::toggleAlbum)
+                    albumsView.adapter = albumAdapter
+                }
                 statusView.visibility = View.GONE
             }
         }.start()
@@ -155,7 +166,7 @@ class FilterActivity : Activity() {
         } else {
             selectedTagIds.addAll(subtree)
         }
-        AppSettings.saveSelectedTagIds(this, selectedTagIds)
+        saveSelectedTags()
         tagsView.adapter?.notifyDataSetChanged()
     }
 
@@ -195,6 +206,15 @@ class FilterActivity : Activity() {
         }
         AppSettings.saveSelectedAlbumIds(this, selectedAlbumIds)
         albumsView.adapter?.notifyDataSetChanged()
+    }
+
+    private fun saveSelectedTags() {
+        if (wallpaperTagsMode) {
+            AppSettings.saveWallpaperRotationTagIds(this, selectedTagIds)
+            WallpaperRotation.schedule(this)
+        } else {
+            AppSettings.saveSelectedTagIds(this, selectedTagIds)
+        }
     }
 
     private fun searchContainer(
@@ -338,7 +358,8 @@ class FilterActivity : Activity() {
         val checkBox: CheckBox,
     ) : RecyclerView.ViewHolder(view)
 
-    private companion object {
+    companion object {
+        const val EXTRA_WALLPAPER_TAGS_MODE = "wallpaper_tags_mode"
         const val TAGS_TAB = 0
         const val SEARCH_DEBOUNCE_MS = 300L
 
