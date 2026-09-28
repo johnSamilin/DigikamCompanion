@@ -22,9 +22,11 @@ class SettingsActivity : Activity() {
     private lateinit var wallpaperTagsView: TextView
     private lateinit var wallpaperFrequencyGroup: RadioGroup
     private lateinit var wallpaperRotationSwitch: Switch
+    private lateinit var changeNowButton: Button
     private var isLoadingStatistics = false
     private var isSortingPhotos = false
     private var photoSortingPlan: PhotoSorting.Plan? = null
+    private var isRestoringWallpaperUi = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +58,7 @@ class SettingsActivity : Activity() {
             text = "Change wallpapers automatically"
             PunkStyle.label(this)
             setOnCheckedChangeListener { _, enabled ->
+                if (isRestoringWallpaperUi) return@setOnCheckedChangeListener
                 AppSettings.saveWallpaperRotationEnabled(this@SettingsActivity, enabled)
                 WallpaperRotation.schedule(this@SettingsActivity)
             }
@@ -70,6 +73,7 @@ class SettingsActivity : Activity() {
                 })
             }
             setOnCheckedChangeListener { _, checkedId ->
+                if (isRestoringWallpaperUi) return@setOnCheckedChangeListener
                 if (checkedId in WALLPAPER_FREQUENCIES) {
                     AppSettings.saveWallpaperRotationFrequencyDays(this@SettingsActivity, checkedId.toLong())
                     WallpaperRotation.schedule(this@SettingsActivity)
@@ -151,6 +155,11 @@ class SettingsActivity : Activity() {
                     })
                 }
             }, buttonLayoutParams())
+            addView(Button(this@SettingsActivity).apply {
+                text = "Change now"
+                PunkStyle.button(this)
+                setOnClickListener { WallpaperRotation.changeNow(this@SettingsActivity) }
+            }.also { changeNowButton = it }, buttonLayoutParams())
             addView(TextView(this@SettingsActivity).apply {
                 text = "Frequency"
                 setPadding(0, 24, 0, 8)
@@ -207,6 +216,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun showWallpaperRotation() {
+        isRestoringWallpaperUi = true
         val tags = AppSettings.wallpaperRotationTagIds(this)
         wallpaperTagsView.text = if (tags.isEmpty()) {
             "No tags selected."
@@ -215,6 +225,8 @@ class SettingsActivity : Activity() {
         }
         wallpaperFrequencyGroup.check(AppSettings.wallpaperRotationFrequencyDays(this).toInt())
         wallpaperRotationSwitch.isChecked = AppSettings.wallpaperRotationEnabled(this)
+        changeNowButton.isEnabled = tags.isNotEmpty()
+        isRestoringWallpaperUi = false
     }
 
     private fun displayNameFor(uriString: String): String {
