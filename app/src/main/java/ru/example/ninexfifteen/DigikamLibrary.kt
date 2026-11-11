@@ -58,6 +58,64 @@ class DigikamLibrary(private val context: Context) {
         }
     } ?: emptyList()
 
+    fun loadPhotoTags(paths: List<String>): PhotoTagSelection = requireNotNull(openDatabase(preferDirect = true) { database ->
+        val tags = buildList {
+            database.rawQuery("SELECT id, pid, name FROM Tags WHERE id != 0 ORDER BY name", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    add(Tag(cursor.getLong(0), cursor.takeIf { !it.isNull(1) }?.getLong(1), cursor.getString(2)))
+                }
+            }
+        }
+        val tagsByPhoto = paths.distinct().associateWith { path ->
+            val imageId = imageIdForPath(database, path)
+            buildSet {
+                database.rawQuery("SELECT tagid FROM ImageTags WHERE imageid = ?", arrayOf(imageId.toString())).use { cursor ->
+                    while (cursor.moveToNext()) add(cursor.getLong(0))
+                }
+            }
+        }
+        PhotoTagSelection(tags, tagsByPhoto)
+    }) { "digikam4.db was not found" }
+
+    internal fun updatePhotoTags(paths: List<String>, changes: PhotoTags.Changes) {
+        if (paths.isEmpty() || (changes.added.isEmpty() && changes.removed.isEmpty())) return
+        withWritableDatabase { database ->
+            database.beginTransaction()
+            try {
+                val imageIds = paths.distinct().map { imageIdForPath(database, it) }
+                imageIds.forEach { imageId ->
+                    changes.removed.forEach { tagId ->
+                        database.delete("ImageTags", "imageid = ? AND tagid = ?", arrayOf(imageId.toString(), tagId.toString()))
+                    }
+                    changes.added.forEach { tagId ->
+                        database.execSQL(
+                            "INSERT INTO ImageTags (imageid, tagid) SELECT ?, ? WHERE NOT EXISTS " +
+                                "(SELECT 1 FROM ImageTags WHERE imageid = ? AND tagid = ?)",
+                            arrayOf(imageId, tagId, imageId, tagId),
+                        )
+                    }
+                }
+                database.setTransactionSuccessful()
+            } finally {
+                database.endTransaction()
+            }
+        }
+    }
+
+    private fun imageIdForPath(database: SQLiteDatabase, path: String): Long {
+        val relativePath = File(path).relativeToOrNull(AppSettings.rootFolder(context))
+            ?.invariantSeparatorsPath?.trim('/')
+            ?: error("Photo is outside the library: $path")
+        return database.rawQuery(
+            "SELECT i.id FROM Images i JOIN Albums a ON a.id = i.album " +
+                "WHERE trim(trim(a.relativePath, '/') || '/' || i.name, '/') = ? LIMIT 1",
+            arrayOf(relativePath),
+        ).use { cursor ->
+            check(cursor.moveToFirst()) { "Photo is not in digikam4.db: $relativePath" }
+            cursor.getLong(0)
+        }
+    }
+
     fun loadAlbums(): List<Album> = openDatabase { database ->
         buildList {
             database.rawQuery(
@@ -133,14 +191,29 @@ class DigikamLibrary(private val context: Context) {
         }
     }
 
-    private fun <T> openDatabase(block: (SQLiteDatabase) -> T): T? {
-        val databaseFile = AppSettings.rootFolderUri(context)
-            ?.let(::findDatabaseInTree)
+    private fun <T> openDatabase(preferDirect: Boolean = false, block: (SQLiteDatabase) -> T): T? {
+        val databaseFile = (if (preferDirect) findDatabaseInDirectory(AppSettings.rootFolder(context)) else null)
+            ?: AppSettings.rootFolderUri(context)?.let(::findDatabaseInTree)
             ?: findDatabaseInDirectory(Environment.getExternalStorageDirectory())
             ?: return null
 
         databaseFile.use { file ->
             return SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use(block)
+        }
+    }
+
+    private fun withWritableDatabase(block: (SQLiteDatabase) -> Unit) {
+        val databaseFile = findDatabaseInDirectory(AppSettings.rootFolder(context))
+            ?: AppSettings.rootFolderUri(context)?.let(::findDatabaseInTree)
+            ?: findDatabaseInDirectory(Environment.getExternalStorageDirectory())
+            ?: error("digikam4.db was not found")
+        databaseFile.use { file ->
+            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use(block)
+            if (file is CachedDatabaseFile) {
+                requireNotNull(context.contentResolver.openOutputStream(file.sourceUri, "wt")) {
+                    "Cannot write to the selected database"
+                }.use { output -> File(file.path).inputStream().use { it.copyTo(output) } }
+            }
         }
     }
 
@@ -249,7 +322,7 @@ class DigikamLibrary(private val context: Context) {
                     val documentId = cursor.getString(idIndex)
                     if (cursor.getString(nameIndex) == DATABASE_NAME) {
                         val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
-                        return CachedDatabaseFile(copyToCache(documentUri))
+                        return CachedDatabaseFile(copyToCache(documentUri), documentUri)
                     }
                     if (cursor.getString(mimeTypeIndex) == DocumentsContract.Document.MIME_TYPE_DIR) {
                         documentIds.add(documentId)
@@ -281,6 +354,7 @@ class DigikamLibrary(private val context: Context) {
         val fileSize: Long,
     )
     data class Tag(val id: Long, val parentId: Long?, val name: String)
+    data class PhotoTagSelection(val tags: List<Tag>, val tagsByPhoto: Map<String, Set<Long>>)
     data class Album(val id: Long, val rootId: Long, val relativePath: String)
 
     private interface DatabaseFile : AutoCloseable {
@@ -292,7 +366,7 @@ class DigikamLibrary(private val context: Context) {
         override fun close() = Unit
     }
 
-    private class CachedDatabaseFile(private val file: File) : DatabaseFile {
+    private class CachedDatabaseFile(private val file: File, val sourceUri: Uri) : DatabaseFile {
         override val path = file.path
         override fun close() {
             file.delete()

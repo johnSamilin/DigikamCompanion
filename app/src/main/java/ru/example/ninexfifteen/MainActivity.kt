@@ -49,6 +49,7 @@ class MainActivity : FragmentActivity() {
     private lateinit var unselectAllButton: Button
     private lateinit var shareButton: Button
     private lateinit var copyButton: Button
+    private lateinit var tagsButton: Button
     private lateinit var photosView: RecyclerView
     private lateinit var filterButton: Button
     private lateinit var resetFilterButton: Button
@@ -121,6 +122,17 @@ class MainActivity : FragmentActivity() {
             visibility = View.GONE
             PunkStyle.button(this)
             setOnClickListener { pickCopyDestination() }
+        }
+        tagsButton = Button(this).apply {
+            text = "Tags"
+            visibility = View.GONE
+            PunkStyle.button(this)
+            setOnClickListener {
+                PhotoTagEditor.open(this@MainActivity, selectedPhotoPaths.toList()) {
+                    shouldReloadLibrary = true
+                    loadPhotos()
+                }
+            }
         }
         photosView = RecyclerView(this).apply {
             layoutManager = GridLayoutManager(this@MainActivity, photoGridSpanCount)
@@ -241,6 +253,14 @@ class MainActivity : FragmentActivity() {
                     Gravity.BOTTOM or Gravity.START,
                 ).apply { setMargins(48, 0, 0, 128) },
             )
+            addView(
+                tagsButton,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM or Gravity.START,
+                ).apply { setMargins(48, 0, 0, 208) },
+            )
         })
     }
 
@@ -255,6 +275,11 @@ class MainActivity : FragmentActivity() {
         if (requestCode == FILTER_REQUEST) {
             shouldReloadLibrary = true
             checkAllFilesAccess()
+        } else if (requestCode == SLIDER_REQUEST) {
+            if (resultCode == RESULT_OK) {
+                shouldReloadLibrary = true
+                checkAllFilesAccess()
+            }
         } else if (requestCode == COPY_DESTINATION_REQUEST) {
             val selectedPaths = pendingCopyPaths
             pendingCopyPaths = null
@@ -378,6 +403,7 @@ class MainActivity : FragmentActivity() {
         selectAllButton.visibility = if (multiSelectMode) View.VISIBLE else View.GONE
         shareButton.visibility = if (multiSelectMode && selectedPhotoPaths.isNotEmpty()) View.VISIBLE else View.GONE
         copyButton.visibility = if (multiSelectMode && selectedPhotoPaths.isNotEmpty()) View.VISIBLE else View.GONE
+        tagsButton.visibility = if (multiSelectMode && selectedPhotoPaths.isNotEmpty()) View.VISIBLE else View.GONE
         copyButton.isEnabled = !isCopying && pendingCopyPaths == null
         (photosView.adapter as? PhotoAdapter)?.notifyDataSetChanged()
     }
@@ -540,7 +566,7 @@ class MainActivity : FragmentActivity() {
 
     private fun openSlider(paths: List<String>, position: Int) {
         PhotoSession.paths = paths
-        startActivity(Intent(this, PhotoSliderActivity::class.java).putExtra("position", position))
+        startActivityForResult(Intent(this, PhotoSliderActivity::class.java).putExtra("position", position), SLIDER_REQUEST)
     }
 
     private fun openAllFilesAccessSettings() {
@@ -755,6 +781,7 @@ class MainActivity : FragmentActivity() {
         const val IMAGE_LOAD_DEBOUNCE_MS = 300L
         const val FILTER_REQUEST = 1
         const val COPY_DESTINATION_REQUEST = 2
+        const val SLIDER_REQUEST = 3
         val imageLoader = Executors.newFixedThreadPool(2)
     }
 }

@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -25,6 +26,7 @@ import kotlin.math.roundToInt
 class PhotoSliderActivity : Activity() {
     private lateinit var detailsPanel: LinearLayout
     private lateinit var pathView: TextView
+    private lateinit var tagsView: TextView
     private lateinit var openWithButton: Button
     private lateinit var shareButton: Button
     private lateinit var makeAnotherButton: Button
@@ -32,6 +34,7 @@ class PhotoSliderActivity : Activity() {
     private var currentPhotoPosition = 0
     private var hiddenPanelOffset = 0f
     private var panelIsVisible = false
+    private var tagLoadGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,7 +59,7 @@ class PhotoSliderActivity : Activity() {
         detailsPanel = createDetailsPanel().also { panel ->
             root.addView(panel, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
+                (resources.displayMetrics.heightPixels * 0.8f).toInt(),
                 Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
             ))
             panel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -86,22 +89,49 @@ class PhotoSliderActivity : Activity() {
             dp(GRAB_HEIGHT_DP),
         ))
 
+        val content = LinearLayout(this@PhotoSliderActivity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        addView(ScrollView(this@PhotoSliderActivity).apply { addView(content) }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f,
+        ))
+
         pathView = TextView(this@PhotoSliderActivity).apply {
             PunkStyle.label(this)
             setPadding(dp(16), dp(8), dp(16), dp(8))
             textSize = 16f
         }
-        addView(pathView, LinearLayout.LayoutParams(
+        content.addView(pathView, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ))
+
+        tagsView = TextView(this@PhotoSliderActivity).apply {
+            PunkStyle.label(this)
+            setPadding(dp(16), 0, dp(16), dp(8))
+        }
+        content.addView(tagsView)
+
+        content.addView(Button(this@PhotoSliderActivity).apply {
+            text = "Edit tags"
+            PunkStyle.button(this)
+            setOnClickListener {
+                PhotoTagEditor.open(this@PhotoSliderActivity, listOf(photos[currentPhotoPosition])) {
+                    setResult(RESULT_OK)
+                    showPhotoTags(currentPhotoPosition)
+                }
+            }
+        }, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { setMargins(dp(16), 0, dp(16), dp(8)) })
 
         openWithButton = Button(this@PhotoSliderActivity).apply {
             text = "Open with"
             PunkStyle.button(this)
             setOnClickListener { openVisiblePhoto() }
         }
-        addView(openWithButton, LinearLayout.LayoutParams(
+        content.addView(openWithButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { setMargins(dp(16), 0, dp(16), dp(8)) })
@@ -111,7 +141,7 @@ class PhotoSliderActivity : Activity() {
             PunkStyle.button(this)
             setOnClickListener { makeAnotherPhoto() }
         }
-        addView(makeAnotherButton, LinearLayout.LayoutParams(
+        content.addView(makeAnotherButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { setMargins(dp(16), 0, dp(16), dp(8)) })
@@ -121,7 +151,7 @@ class PhotoSliderActivity : Activity() {
             PunkStyle.button(this)
             setOnClickListener { shareVisiblePhoto() }
         }
-        addView(shareButton, LinearLayout.LayoutParams(
+        content.addView(shareButton, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { setMargins(dp(16), 0, dp(16), dp(16)) })
@@ -176,6 +206,27 @@ class PhotoSliderActivity : Activity() {
     private fun showPhotoPath(position: Int) {
         currentPhotoPosition = position
         pathView.text = photos[position]
+        showPhotoTags(position)
+    }
+
+    private fun showPhotoTags(position: Int) {
+        val path = photos[position]
+        val generation = ++tagLoadGeneration
+        tagsView.text = "Loading tags..."
+        Thread {
+            val result = runCatching { DigikamLibrary(this).loadPhotoTags(listOf(path)) }
+            runOnUiThread {
+                if (generation != tagLoadGeneration) return@runOnUiThread
+                tagsView.text = result.fold(
+                    onSuccess = { selection ->
+                        val tagIds = selection.tagsByPhoto[path].orEmpty()
+                        val names = selection.tags.filter { it.id in tagIds }.map { it.name }
+                        if (names.isEmpty()) "Tags: none" else "Tags: ${names.joinToString()}"
+                    },
+                    onFailure = { "Unable to load tags: ${it.message}" },
+                )
+            }
+        }.start()
     }
 
     private fun shareVisiblePhoto() {
